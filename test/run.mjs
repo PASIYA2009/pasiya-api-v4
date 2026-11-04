@@ -1,7 +1,7 @@
 // Offline test: mocks Firestore, Identity Toolkit and upstream sites, then calls the real Vercel function.
 // Run: node test/run.mjs   (no dependencies needed)
 import { generateKeyPairSync } from 'node:crypto';
-import handler from '../api/[...path].js';
+import handler from '../api/index.js';
 import { cached } from '../system/util.js';
 
 const { privateKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });

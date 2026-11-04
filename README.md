@@ -1,7 +1,7 @@
 # PASIYA API (Vercel Functions · Node.js, no framework, no dependencies)
 
 ```
-api/[...path].js               ← the only Vercel Function (all /api/* goes through it)
+api/index.js  (+ system/router.js)  ← the only Vercel Function (all /api/* goes through it)
 vercel.json                    ← tells Vercel: no framework, serve public/, functions in api/
 public/index.html              ← dashboard (served at "/")
 system/                        ← the PLATFORM (no scraping here)

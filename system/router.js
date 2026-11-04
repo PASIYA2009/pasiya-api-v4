@@ -1,9 +1,9 @@
-// The single Vercel Function for every /api/* request (Node.js runtime, no framework).
-import { HttpError, json, CORS, SITE, CREATOR, stamp } from '../system/util.js';
-import { serve, endpointHealth } from '../system/gateway.js';
-import { account } from '../system/account.js';
-import { status } from '../system/status.js';
-import { ENDPOINTS, CATALOG } from '../system/registry.js';
+// The router for every /api/* request (used by api/index.js).
+import { HttpError, json, CORS, SITE, CREATOR, stamp } from './util.js';
+import { serve, endpointHealth } from './gateway.js';
+import { account } from './account.js';
+import { status } from './status.js';
+import { ENDPOINTS, CATALOG } from './registry.js';
 
 async function route(req) {
   const env = process.env;

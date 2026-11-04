@@ -4,6 +4,18 @@ import * as fs from './db.js';
 import { statsLast24h } from './gateway.js';
 import { CATALOG } from './registry.js';
 
+// Short, safe reason shown under the DATABASE card so the owner can see what to fix (no secrets are ever included).
+function dbHint(e) {
+  const m = String(e?.message || e || '');
+  if (/JSON/i.test(m) && /position|token|Unexpected|parse/i.test(m)) return 'service account JSON is not valid JSON';
+  if (/atob|base64|importKey|DataError|private_key|pkcs8|Invalid.*key/i.test(m) || e?.name === 'DataError' || e?.name === 'InvalidCharacterError') return 'private_key in the JSON is broken';
+  if (/invalid_grant|invalid_scope|invalid_client|unauthorized|authentication failed|Invalid JWT/i.test(m)) return 'service account rejected (wrong/old key)';
+  if (/has not been used|disabled|SERVICE_DISABLED/i.test(m)) return 'Cloud Firestore API is not enabled';
+  if (/NOT_FOUND|does not exist|database.*not/i.test(m)) return 'Firestore database not created / wrong project id';
+  if (/permission|PERMISSION_DENIED|forbidden/i.test(m)) return 'service account has no Firestore permission';
+  return m.slice(0, 70) || 'unknown error';
+}
+
 export async function status(req, env) {
   const h = (k) => req.headers.get(k);
   let db = { ok: false, name: 'Firebase Firestore', note: 'Not configured' };
@@ -13,7 +25,7 @@ export async function status(req, env) {
       stats = await cached('status:24h', 30, () => statsLast24h(env));
       users = await cached('status:users', 60, () => fs.count(env, 'users')).catch(() => null);
       db = { ok: true, name: 'Firebase Firestore', note: 'Connected' };
-    } catch { db = { ok: false, name: 'Firebase Firestore', note: 'Unreachable' }; }
+    } catch (e) { db = { ok: false, name: 'Firestore: ' + dbHint(e), note: 'Unreachable' }; }
   }
   const started = env.PLATFORM_START ? new Date(env.PLATFORM_START).getTime() : null;
   let city = h('x-vercel-ip-city');
