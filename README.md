@@ -31,6 +31,11 @@ Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 - Downloads are best effort (sites change; YouTube may refuse Vercel's datacenter IPs). For maximum reliability host the separate yt-dlp service (`pasiya-scraper-api`) and set `SCRAPER_URL` + `SCRAPER_SHARED_SECRET`: it then answers the download endpoints instead.
 - `maxDuration` is 30s in `vercel.json` (Hobby allows up to 60).
 
+## v4.1
+- **Fix:** Admin > API manager: switching an API on/off no longer scrolls the page to the bottom (the list is no longer rebuilt on a toggle; scroll positions are kept when it is).
+- **AI:** 9 more providers from free-ai-apis (Hugging Face, SambaNova, Together, Fireworks, DeepInfra, Hyperbolic, Novita, Cohere, AIML) join every model chain when their key is set. New: `/api/ai/translate` (keyless), `/api/ai/search` (Tavily key).
+- **Social:** 16 `/api/social/*` endpoints (TikTok, Instagram, X, YouTube, Facebook, Reddit) powered by Apify actors from social-media-apis. Appear only when `APIFY_TOKEN` is set.
+
 ## v4.0 (fix release)
 - **AI:** official-provider chain now also has Cerebras, Mistral, GitHub Models and Anthropic; Pollinations is last and its 45 s limit is remembered (no more 14 s timeouts). Set free keys (see `.env.example`). chatgpt.com / claude.ai themselves have no public API, so they are NOT scraped: official free APIs are the reliable way.
 - **News:** each site tries its own feed + common alternate paths, then Google News (Sinhala + English, 7 days), then Bing News.

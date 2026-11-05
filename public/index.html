@@ -616,9 +616,20 @@ $('#loadUsers').onclick = loadUsers;
 const A = { apis: [], off: new Set(), hc: {}, t: 0 };
 const HC = { ok: ['ok', 'WORKING'], fail: ['fail', 'FAILED'], warn: ['warn', 'NEEDS REAL INPUT'], skip: ['skip', 'NOT TESTED'] };
 function renderApis() {
-  const q = $('#apiFilter').value.trim().toLowerCase();
-  $('#apiRows').innerHTML = A.apis.filter((a) => !q || `${a.name} ${a.path}`.toLowerCase().includes(q)).map((a) => { const h = A.hc[a.path], c = h && HC[h.state];
+  const q = $('#apiFilter').value.trim().toLowerCase(), box = $('#apiRows');
+  // Rebuilding the list used to collapse its height for a moment, so the browser clamped the page scroll to the bottom.
+  // Freeze the height and restore both scroll positions (list + page) so nothing jumps.
+  const top = box.scrollTop, sx = window.scrollX, sy = window.scrollY, active = document.activeElement?.dataset?.api;
+  box.style.minHeight = box.offsetHeight + 'px';
+  box.innerHTML = A.apis.filter((a) => !q || `${a.name} ${a.path}`.toLowerCase().includes(q)).map((a) => { const h = A.hc[a.path], c = h && HC[h.state];
     return `<div class="rowi"><span><b>${esc(a.name)}</b><br><span class="muted">${esc(a.path)}${a.configured ? '' : ' · not configured'}</span>${h?.note ? `<br><small class="muted">${esc(h.note)}</small>` : ''}</span><span class="btn-row">${c ? `<span class="chip ${c[0]}">${c[1]}${h.ms ? ' · ' + h.ms + 'ms' : ''}</span>` : ''}<label class="sw" aria-label="Switch ${esc(a.name)} on or off"><input type="checkbox" data-api="${esc(a.path)}" ${A.off.has(a.path) ? '' : 'checked'}><span class="track"></span></label></span></div>`; }).join('') || '<div class="muted">No API matches.</div>';
+  box.scrollTop = top;
+  if (active) box.querySelector(`[data-api="${CSS.escape(active)}"]`)?.focus({ preventScroll: true });
+  box.style.minHeight = '';
+  window.scrollTo({ left: sx, top: sy, behavior: 'instant' });
+  updateApiCounts();
+}
+function updateApiCounts() {
   $('#apiOn').textContent = A.apis.length - A.off.size; $('#apiOff').textContent = A.off.size;
   $('#hcOffFailed').disabled = !A.apis.some((a) => A.hc[a.path]?.state === 'fail' && !A.off.has(a.path));
 }
@@ -633,7 +644,8 @@ async function loadFeatures() {
 $('#swDaily').onchange = (e) => saveFeatures({ dailyEnabled: e.target.checked }, '#featMsg');
 $('#swSpin').onchange = (e) => saveFeatures({ spinEnabled: e.target.checked }, '#featMsg');
 $('#apiFilter').oninput = renderApis;
-$('#apiRows').onchange = (e) => { const p = e.target.dataset.api; if (!p) return; e.target.checked ? A.off.delete(p) : A.off.add(p); renderApis(); saveApis(); };
+// Toggle: update state + counters only. No re-render, so the page never moves.
+$('#apiRows').onchange = (e) => { const p = e.target.dataset.api; if (!p) return; e.target.checked ? A.off.delete(p) : A.off.add(p); updateApiCounts(); saveApis(); };
 $('#hcAllOn').onclick = () => { A.off.clear(); renderApis(); saveApis(); };
 $('#hcOffFailed').onclick = () => { A.apis.forEach((a) => { if (A.hc[a.path]?.state === 'fail') A.off.add(a.path); }); renderApis(); saveApis(); };
 $('#hcRun').onclick = async () => {

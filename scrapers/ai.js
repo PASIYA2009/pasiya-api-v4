@@ -33,17 +33,35 @@ const chains = (env) => withFree({
   ]
 }, env);
 
+// More providers from https://github.com/OuterSpacee/free-ai-apis (all OpenAI-compatible, free tier / free credits).
+// They are only used when their key is set, so adding a key is all it takes. Every model id can be overridden with MODEL_* env vars.
+const more = (env) => ({
+  gpt: [['huggingface', env.MODEL_GPT_HF || 'openai/gpt-oss-120b'], ['sambanova', env.MODEL_GPT_SAMBANOVA || 'gpt-oss-120b'], ['together', env.MODEL_GPT_TOGETHER || 'openai/gpt-oss-20b'], ['fireworks', env.MODEL_GPT_FIREWORKS || 'accounts/fireworks/models/gpt-oss-20b'], ['deepinfra', env.MODEL_GPT_DEEPINFRA || 'openai/gpt-oss-20b']],
+  deepseek: [['sambanova', env.MODEL_DEEPSEEK_SAMBANOVA || 'DeepSeek-V3.1'], ['huggingface', env.MODEL_DEEPSEEK_HF || 'deepseek-ai/DeepSeek-V3.1'], ['together', env.MODEL_DEEPSEEK_TOGETHER || 'deepseek-ai/DeepSeek-V3.1'], ['fireworks', env.MODEL_DEEPSEEK_FIREWORKS || 'accounts/fireworks/models/deepseek-v3p1'], ['deepinfra', env.MODEL_DEEPSEEK_DEEPINFRA || 'deepseek-ai/DeepSeek-V3.1'], ['hyperbolic', env.MODEL_DEEPSEEK_HYPERBOLIC || 'deepseek-ai/DeepSeek-V3']],
+  gemma: [['huggingface', env.MODEL_GEMMA_HF || 'google/gemma-3-27b-it'], ['deepinfra', env.MODEL_GEMMA_DEEPINFRA || 'google/gemma-3-27b-it']],
+  kimi: [['huggingface', env.MODEL_KIMI_HF || 'moonshotai/Kimi-K2-Instruct'], ['together', env.MODEL_KIMI_TOGETHER || 'moonshotai/Kimi-K2-Instruct-0905'], ['fireworks', env.MODEL_KIMI_FIREWORKS || 'accounts/fireworks/models/kimi-k2-instruct-0905'], ['hyperbolic', env.MODEL_KIMI_HYPERBOLIC || 'moonshotai/Kimi-K2-Instruct'], ['deepinfra', env.MODEL_KIMI_DEEPINFRA || 'moonshotai/Kimi-K2-Instruct']],
+  glm: [['together', env.MODEL_GLM_TOGETHER || 'zai-org/GLM-4.5-Air-FP8'], ['huggingface', env.MODEL_GLM_HF || 'zai-org/GLM-4.5-Air'], ['deepinfra', env.MODEL_GLM_DEEPINFRA || 'zai-org/GLM-4.5-Air']],
+  minimax: [['huggingface', env.MODEL_MINIMAX_HF || 'MiniMaxAI/MiniMax-M2'], ['together', env.MODEL_MINIMAX_TOGETHER || 'MiniMaxAI/MiniMax-M2'], ['deepinfra', env.MODEL_MINIMAX_DEEPINFRA || 'MiniMaxAI/MiniMax-M2']],
+  coder: [['huggingface', env.MODEL_CODER_HF || 'Qwen/Qwen3-Coder-480B-A35B-Instruct'], ['together', env.MODEL_CODER_TOGETHER || 'Qwen/Qwen3-Coder-480B-A35B-Instruct-FP8'], ['fireworks', env.MODEL_CODER_FIREWORKS || 'accounts/fireworks/models/qwen3-coder-480b-a35b-instruct'], ['hyperbolic', env.MODEL_CODER_HYPERBOLIC || 'Qwen/Qwen3-Coder-480B-A35B-Instruct'], ['deepinfra', env.MODEL_CODER_DEEPINFRA || 'Qwen/Qwen3-Coder-480B-A35B-Instruct']],
+  llama: [['sambanova', env.MODEL_LLAMA_SAMBANOVA || 'Meta-Llama-3.1-8B-Instruct'], ['together', env.MODEL_LLAMA_TOGETHER || 'meta-llama/Llama-3.3-70B-Instruct-Turbo'], ['huggingface', env.MODEL_LLAMA_HF || 'meta-llama/Llama-3.1-8B-Instruct']]
+});
+
 // Substitutes: used only when NONE of a model's own providers answered, so every endpoint still gives an answer (the reply says substituted:true).
 const generic = (env) => [
   ['groq', env.MODEL_SUB_GROQ || 'llama-3.3-70b-versatile'], ['cerebras', env.MODEL_SUB_CEREBRAS || 'llama-3.3-70b'],
   ['mistral', env.MODEL_SUB_MISTRAL || 'mistral-small-latest'], ['github', env.MODEL_SUB_GITHUB || 'openai/gpt-4.1-mini'],
-  ['openrouter', env.MODEL_SUB_OPENROUTER || 'meta-llama/llama-3.3-70b-instruct:free'], ['workers-ai', env.MODEL_SUB_CF || '@cf/meta/llama-3.3-70b-instruct-fp8-fast']
+  ['openrouter', env.MODEL_SUB_OPENROUTER || 'meta-llama/llama-3.3-70b-instruct:free'], ['workers-ai', env.MODEL_SUB_CF || '@cf/meta/llama-3.3-70b-instruct-fp8-fast'],
+  ['sambanova', env.MODEL_SUB_SAMBANOVA || 'Meta-Llama-3.3-70B-Instruct'], ['together', env.MODEL_SUB_TOGETHER || 'meta-llama/Llama-3.3-70B-Instruct-Turbo'],
+  ['huggingface', env.MODEL_SUB_HF || 'meta-llama/Llama-3.3-70B-Instruct'], ['hyperbolic', env.MODEL_SUB_HYPERBOLIC || 'meta-llama/Llama-3.3-70B-Instruct'],
+  ['fireworks', env.MODEL_SUB_FIREWORKS || 'accounts/fireworks/models/llama-v3p3-70b-instruct'], ['deepinfra', env.MODEL_SUB_DEEPINFRA || 'meta-llama/Llama-3.3-70B-Instruct'],
+  ['novita', env.MODEL_SUB_NOVITA || 'meta-llama/llama-3.3-70b-instruct'], ['cohere', env.MODEL_SUB_COHERE || 'command-r-08-2024'], ['aiml', env.MODEL_SUB_AIML || 'gpt-4o-mini']
 ];
 const PMODEL = { gemini: 'gemini', deepseek: 'deepseek', claude: 'claude', llama: 'llama', coder: 'qwen-coder' }; // best matching Pollinations model per name (others use 'openai')
 // Order: own providers -> substitutes -> Pollinations (last: anonymous use is limited to 1 reply / 45 s per IP, a free key from enter.pollinations.ai removes that).
 function withFree(c, env) {
-  const g = generic(env);
-  return Object.fromEntries(Object.entries(c).map(([k, v]) => {
+  const g = generic(env), m = more(env);
+  return Object.fromEntries(Object.entries(c).map(([k, v0]) => {
+    const v = [...v0, ...(m[k] || [])];
     const own = new Set(v.map((x) => x[0] + '|' + x[1]));
     return [k, [...v, ...g.filter((x) => !own.has(x[0] + '|' + x[1])).map((x) => [...x, 'sub']), ['pollinations', PMODEL[k] || 'openai', 'sub']]];
   }));
@@ -57,7 +75,17 @@ const OAI = {
   deepseek: ['https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'],
   cerebras: ['https://api.cerebras.ai/v1/chat/completions', 'CEREBRAS_API_KEY'],
   mistral: ['https://api.mistral.ai/v1/chat/completions', 'MISTRAL_API_KEY'],
-  github: ['https://models.github.ai/inference/chat/completions', 'GITHUB_TOKEN']
+  github: ['https://models.github.ai/inference/chat/completions', 'GITHUB_TOKEN'],
+  // from free-ai-apis:
+  huggingface: ['https://router.huggingface.co/v1/chat/completions', 'HF_TOKEN'],
+  sambanova: ['https://api.sambanova.ai/v1/chat/completions', 'SAMBANOVA_API_KEY'],
+  together: ['https://api.together.xyz/v1/chat/completions', 'TOGETHER_API_KEY'],
+  fireworks: ['https://api.fireworks.ai/inference/v1/chat/completions', 'FIREWORKS_API_KEY'],
+  deepinfra: ['https://api.deepinfra.com/v1/openai/chat/completions', 'DEEPINFRA_API_KEY'],
+  hyperbolic: ['https://api.hyperbolic.xyz/v1/chat/completions', 'HYPERBOLIC_API_KEY'],
+  novita: ['https://api.novita.ai/v3/openai/chat/completions', 'NOVITA_API_KEY'],
+  cohere: ['https://api.cohere.ai/compatibility/v1/chat/completions', 'COHERE_API_KEY'],
+  aiml: ['https://api.aimlapi.com/v1/chat/completions', 'AIML_API_KEY']
 };
 const configured = (prov, env) => (OAI[prov] ? !!env[OAI[prov][1]] : ({
   gemini: !!env.GEMINI_API_KEY, anthropic: !!env.ANTHROPIC_API_KEY, pollinations: true, 'workers-ai': !!(env.CF_ACCOUNT_ID && env.CF_API_TOKEN)
@@ -168,7 +196,7 @@ function makeHandler(forced, persona) {
       } catch (e) { tried.push(`${prov}: ${String(e.message).slice(0, 140)}`); }
     }
     const hasKey = usable.some(([prov]) => prov !== 'pollinations');
-    throw new HttpError(hasKey ? 502 : 503, (hasKey ? 'All providers failed. ' : 'No AI key is set on this server, and the free anonymous service is limited. Owner: add free keys (GROQ_API_KEY, GEMINI_API_KEY, CEREBRAS_API_KEY, OPENROUTER_API_KEY, POLLINATIONS_API_KEY...). ') + tried.join(' | '));
+    throw new HttpError(hasKey ? 502 : 503, (hasKey ? 'All providers failed. ' : 'No AI key is set on this server, and the free anonymous service is limited. Owner: add free keys (GROQ_API_KEY, GEMINI_API_KEY, CEREBRAS_API_KEY, OPENROUTER_API_KEY, SAMBANOVA_API_KEY, HF_TOKEN, TOGETHER_API_KEY, POLLINATIONS_API_KEY...). ') + tried.join(' | '));
   };
 }
 

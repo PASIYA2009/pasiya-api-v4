@@ -23,6 +23,8 @@ import extras from '../scrapers/extras.js';
 import moreDl from '../scrapers/more_dl.js';
 import hd from '../scrapers/hd.js';
 import newTools from '../scrapers/new_tools.js';
+import aiExtra from '../scrapers/ai_extra.js';
+import apify from '../scrapers/apify.js';
 
 // Forwards to the separate Node/yt-dlp service. The shared secret never leaves the server.
 export const forward = (upstreamPath) => async (p, env) => {
@@ -37,7 +39,7 @@ export const forward = (upstreamPath) => async (p, env) => {
 };
 
 // Order here = order of the categories in the dashboard.
-const ALL = [ai, news, newsfeeds, search, weather, utility, extras, tv, movies, youtube, facebook, tiktok, instagram, download, mediafire, gdrive, catbox, moreDl, hd, newTools].flat();
+const ALL = [ai, aiExtra, news, newsfeeds, search, weather, utility, extras, tv, movies, youtube, facebook, tiktok, instagram, download, mediafire, gdrive, catbox, moreDl, hd, newTools, apify].flat();
 
 export const ENDPOINTS = new Map(ALL.map((e) => {
   if (!e.remote) return [e.path, e];

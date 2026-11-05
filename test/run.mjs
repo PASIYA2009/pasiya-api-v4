@@ -184,9 +184,10 @@ r = await call('/api/usage', auth, user2); ok('usage logged', r.b.items.length =
 for (let i = 0; i < 12; i++) await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`, {}, user2);
 r = await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`, {}, user2); ok('out of coins -> 402', r.s === 402, r);
 
-r = await call('/api/status', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-vercel-id': 'sin1::abc' } }); ok('status shape', r.b.status === 'Online' && r.b.database.ok && r.b.requests24h > 5 && r.b.endpoints === 109 && r.b.categories === 10, r.b);
-r = await call('/api/catalog'); ok('catalog lists the public APIs', r.b.apis.length === 109, r.b.apis.length);
-r = await call('/api/catalog', {}, { ...env, SCRAPER_URL: 'https://s' }); ok('catalog same w/ SCRAPER_URL', r.b.apis.length === 109, r.b.apis.length);
+r = await call('/api/status', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-vercel-id': 'sin1::abc' } }); ok('status shape', r.b.status === 'Online' && r.b.database.ok && r.b.requests24h > 5 && r.b.endpoints === 110 && r.b.categories === 10, r.b);
+r = await call('/api/catalog'); ok('catalog lists the public APIs', r.b.apis.length === 110, r.b.apis.length);
+r = await call('/api/catalog', {}, { ...env, SCRAPER_URL: 'https://s' }); ok('catalog same w/ SCRAPER_URL', r.b.apis.length === 110, r.b.apis.length);
+r = await call('/api/catalog', {}, { ...env, APIFY_TOKEN: 'x', TAVILY_API_KEY: 'x' }); ok('social (Apify) + Tavily APIs appear only when their key is set', r.b.apis.length === 110 + 16 + 1 && r.b.apis.some((a) => a.path === '/api/social/tiktok/profile'), r.b.apis.length);
 r = await call('/api/daily-claim', { method: 'POST', ...auth }, user2); ok('daily claim', r.s === 200, r);
 r = await call('/api/daily-claim', { method: 'POST', ...auth }, user2); ok('daily claim twice 409', r.s === 409, r);
 r = await call('/api/spin', { method: 'POST', ...auth }, user2); ok('spin awards coins', r.s === 200 && [10,25,50,100,250].includes(r.b.reward) && r.b.index >= 0 && r.b.index < 5, r);
