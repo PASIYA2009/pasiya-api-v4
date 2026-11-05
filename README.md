@@ -32,6 +32,8 @@ Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 - `maxDuration` is 30s in `vercel.json` (Hobby allows up to 60).
 
 ## v4.1
+- **Tempmail:** Guerrilla Mail is now tried first (mail.tm / mail.gw as backup). Same 3 endpoints, same `id` flow; an expired Guerrilla session is rebuilt automatically.
+- **Switched-off APIs vanish for users:** the catalog is no longer cached, the server flag cache is 8 s, and the dashboard re-reads the API list every 30 s (and when the tab opens), so users no longer need to reload. A failed refresh keeps the current list.
 - **Fix:** Admin > API manager: switching an API on/off no longer scrolls the page to the bottom (the list is no longer rebuilt on a toggle; scroll positions are kept when it is).
 - **AI:** 9 more providers from free-ai-apis (Hugging Face, SambaNova, Together, Fireworks, DeepInfra, Hyperbolic, Novita, Cohere, AIML) join every model chain when their key is set. New: `/api/ai/translate` (keyless), `/api/ai/search` (Tavily key).
 - **Social:** 16 `/api/social/*` endpoints (TikTok, Instagram, X, YouTube, Facebook, Reddit) powered by Apify actors from social-media-apis. Appear only when `APIFY_TOKEN` is set.

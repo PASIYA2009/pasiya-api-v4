@@ -11,7 +11,7 @@ export async function getFlags(env) {
     try { s = await fs.get(env, 'settings', 'features'); } catch { if (mem.v) return mem.v; }
   }
   const v = { dailyEnabled: s?.dailyEnabled !== false, spinEnabled: s?.spinEnabled !== false, disabledApis: Array.isArray(s?.disabledApis) ? s.disabledApis.filter((x) => typeof x === 'string') : [] };
-  mem = { v, exp: Date.now() + 20_000 };
+  mem = { v, exp: Date.now() + 8_000 };
   return v;
 }
 export const resetFlags = () => { mem = { v: null, exp: 0 }; };

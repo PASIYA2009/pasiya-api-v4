@@ -140,8 +140,8 @@ r = await call(`/api/news?apikey=${KEY}&source=nope`); ok('bad source 400', r.s 
 r = await call(`/api/tv/channels?apikey=${KEY}&q=derana`); ok('tv m3u', r.s === 200 && r.b.result.count === 1 && r.b.result.channels[0].quality === '720p' && r.b.result.channels[0].name === 'Derana TV', r.b);
 r = await call(`/api/tv/channels?apikey=${KEY}`); ok('tv skips EXTVLCOPT', r.b.result.count === 2, r.b);
 r = await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`); ok('gemini ok', r.s === 200 && r.b.result.answer === 'Hello from Gemini', r);
-r = await call(`/api/ai/gpt?apikey=${KEY}&prompt=hi`); ok('gpt: openrouter fails -> keyless fallback answers', r.s === 200 && r.b.result.provider === 'pollinations', r);
-r = await call(`/api/ai/llama?apikey=${KEY}&prompt=hi`); ok('llama with NO keys works (keyless)', r.s === 200 && r.b.result.provider === 'pollinations' && r.b.result.answer === 'free hi', r);
+r = await call(`/api/ai/gpt?apikey=${KEY}&prompt=hi`); ok('gpt: openrouter fails -> substitute (Gemini first, then keyless) answers', r.s === 200 && r.b.result.substituted === true && ['gemini', 'pollinations'].includes(r.b.result.provider), r);
+r = await call(`/api/ai/llama?apikey=${KEY}&prompt=hi`); ok('llama still answers when its own providers fail (Gemini substitute or keyless)', r.s === 200 && r.b.result.substituted === true && ['gemini', 'pollinations'].includes(r.b.result.provider), r);
 const envAI = { ...env, GEMINI_API_KEY: undefined, OPENROUTER_API_KEY: undefined, CF_ACCOUNT_ID: 'acc', CF_API_TOKEN: 'tok' };
 for (const mdl of ['gemini', 'gpt', 'deepseek', 'claude', 'llama']) { r = await call(`/api/ai/${mdl}?apikey=${KEY}&prompt=hi`, {}, envAI); ok(`${mdl} works with only Cloudflare REST fallback`, r.s === 200 && r.b.result.provider === 'workers-ai', r); }
 // stale-if-error: after the fresh copy expires and the site is down, the last good copy is still served

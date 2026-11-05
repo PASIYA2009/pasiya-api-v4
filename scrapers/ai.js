@@ -5,7 +5,7 @@
 import { HttpError, fetchT, param } from '../system/util.js';
 
 const chains = (env) => withFree({
-  gemini: [['gemini', env.MODEL_GEMINI || 'gemini-2.5-flash'], ['workers-ai', env.MODEL_GEMINI_FALLBACK_CF || '@cf/meta/llama-3.3-70b-instruct-fp8-fast']],
+  gemini: [['gemini', env.MODEL_GEMINI || 'gemini-3.8-flash'], ['gemini', 'gemini-flash-latest'], ['gemini', 'gemini-2.5-flash'], ['gemini', 'gemini-flash-lite-latest'], ['workers-ai', env.MODEL_GEMINI_FALLBACK_CF || '@cf/meta/llama-3.3-70b-instruct-fp8-fast']],
   gpt: [
     ['openrouter', env.MODEL_GPT_OPENROUTER || 'openai/gpt-oss-20b:free'],
     ['groq', env.MODEL_GPT_GROQ || 'openai/gpt-oss-20b'],
@@ -21,8 +21,8 @@ const chains = (env) => withFree({
   ],
   // There is no free Claude API. Real Claude needs an OpenRouter key with credits (or ANTHROPIC_API_KEY); otherwise a free substitute answers.
   claude: [['anthropic', env.MODEL_CLAUDE_ANTHROPIC || 'claude-haiku-4-5'], ['openrouter', env.MODEL_CLAUDE || 'anthropic/claude-haiku-4.5']],
-  gemma: [['openrouter', env.MODEL_GEMMA || 'google/gemma-3-27b-it:free'], ['groq', env.MODEL_GEMMA_GROQ || 'gemma2-9b-it'], ['workers-ai', env.MODEL_GEMMA_CF || '@cf/google/gemma-3-12b-it']],
-  kimi: [['openrouter', env.MODEL_KIMI || 'moonshotai/kimi-k2:free'], ['groq', env.MODEL_KIMI_GROQ || 'moonshotai/kimi-k2-instruct']],
+  gemma: [['openrouter', env.MODEL_GEMMA || 'google/gemma-3-27b-it:free'], ['groq', env.MODEL_GEMMA_GROQ || 'google/gemma-3-27b-it'], ['workers-ai', env.MODEL_GEMMA_CF || '@cf/google/gemma-3-12b-it']],
+  kimi: [['openrouter', env.MODEL_KIMI || 'moonshotai/kimi-k2:free'], ['groq', env.MODEL_KIMI_GROQ || 'moonshotai/kimi-k2-instruct-0905']],
   glm: [['openrouter', env.MODEL_GLM || 'z-ai/glm-4.5-air:free'], ['cerebras', env.MODEL_GLM_CEREBRAS || 'zai-glm-4.6']],
   minimax: [['openrouter', env.MODEL_MINIMAX || 'minimax/minimax-m2:free']],
   coder: [['openrouter', env.MODEL_CODER || 'qwen/qwen3-coder:free'], ['groq', env.MODEL_CODER_GROQ || 'openai/gpt-oss-120b'], ['cerebras', env.MODEL_CODER_CEREBRAS || 'qwen-3-coder-480b'], ['workers-ai', env.MODEL_CODER_CF || '@cf/qwen/qwen2.5-coder-32b-instruct']],
@@ -48,7 +48,8 @@ const more = (env) => ({
 
 // Substitutes: used only when NONE of a model's own providers answered, so every endpoint still gives an answer (the reply says substituted:true).
 const generic = (env) => [
-  ['groq', env.MODEL_SUB_GROQ || 'llama-3.3-70b-versatile'], ['cerebras', env.MODEL_SUB_CEREBRAS || 'llama-3.3-70b'],
+  ['gemini', env.MODEL_SUB_GEMINI || 'gemini-3.8-flash'], ['gemini', 'gemini-flash-latest'], ['gemini', 'gemini-flash-lite-latest'],
+  ['groq', env.MODEL_SUB_GROQ || 'auto'], ['cerebras', env.MODEL_SUB_CEREBRAS || 'auto'],
   ['mistral', env.MODEL_SUB_MISTRAL || 'mistral-small-latest'], ['github', env.MODEL_SUB_GITHUB || 'openai/gpt-4.1-mini'],
   ['openrouter', env.MODEL_SUB_OPENROUTER || 'meta-llama/llama-3.3-70b-instruct:free'], ['workers-ai', env.MODEL_SUB_CF || '@cf/meta/llama-3.3-70b-instruct-fp8-fast'],
   ['sambanova', env.MODEL_SUB_SAMBANOVA || 'Meta-Llama-3.3-70B-Instruct'], ['together', env.MODEL_SUB_TOGETHER || 'meta-llama/Llama-3.3-70B-Instruct-Turbo'],
@@ -90,6 +91,36 @@ const OAI = {
 const configured = (prov, env) => (OAI[prov] ? !!env[OAI[prov][1]] : ({
   gemini: !!env.GEMINI_API_KEY, anthropic: !!env.ANTHROPIC_API_KEY, pollinations: true, 'workers-ai': !!(env.CF_ACCOUNT_ID && env.CF_API_TOKEN)
 }[prov]));
+
+// Ask the provider which models THIS key can really use (cached 10 min). Models that are missing / decommissioned are skipped
+// instantly instead of failing, and model 'auto' picks the best one that exists. If the list cannot be read, nothing is filtered.
+const MODELS_URL = { groq: 'https://api.groq.com/openai/v1/models', mistral: 'https://api.mistral.ai/v1/models', cerebras: 'https://api.cerebras.ai/v1/models' };
+const PREFER = {
+  groq: ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'llama-3.3-70b-versatile', 'meta-llama/llama-4-scout-17b-16e-instruct', 'qwen/qwen3-32b', 'llama-3.1-8b-instant'],
+  cerebras: ['gpt-oss-120b', 'llama-3.3-70b', 'qwen-3-235b-a22b-instruct-2507', 'llama3.1-8b']
+};
+const NOT_CHAT = /whisper|guard|tts|orpheus|embed|moderation|ocr|transcribe|playai/i;
+const modelMem = new Map();
+async function modelList(prov, env) {
+  if (!MODELS_URL[prov]) return null;
+  const hit = modelMem.get(prov);
+  if (hit && hit.exp > Date.now()) return hit.v;
+  let v = null;
+  try {
+    const r = await fetchT(MODELS_URL[prov], { headers: { Authorization: `Bearer ${env[OAI[prov][1]]}` } }, 4000);
+    const d = await r.json().catch(() => ({}));
+    if (r.ok && Array.isArray(d.data)) v = d.data.map((m) => m.id).filter((id) => id && !NOT_CHAT.test(id));
+  } catch { /* keep null */ }
+  modelMem.set(prov, { v, exp: Date.now() + (v ? 600_000 : 60_000) });
+  return v;
+}
+// -> the model id to call, or null = this key does not have it (skip)
+async function resolveModel(prov, model, env) {
+  const list = await modelList(prov, env);
+  if (model === 'auto') return list ? (PREFER[prov] || []).find((m) => list.includes(m)) || list[0] || null : (PREFER[prov] || [])[0] || null;
+  if (list && !list.includes(model)) return null;
+  return model;
+}
 
 async function openaiStyle(url, key, model, messages, max, ms, extraHeaders = {}) {
   const r = await fetchT(url, {
@@ -187,10 +218,12 @@ function makeHandler(forced, persona) {
       { role: 'user', content: prompt }
     ];
     const tried = [], deadline = Date.now() + 20000; // total budget stays under the Vercel limit and the 24 s health check
-    for (const [prov, model, kind] of usable) {
+    for (const [prov, model0, kind] of usable) {
       const left = deadline - Date.now();
       if (left < 2500) { tried.push('stopped: time budget used'); break; }
       try {
+        const model = await resolveModel(prov, model0, env);
+        if (!model) { tried.push(`${prov}: ${model0} is not available for this key (skipped)`); continue; }
         const answer = await run(prov, model, messages, max, env, Math.min(9000, left));
         return { model: name, provider: prov, modelId: model, ...(kind === 'sub' ? { substituted: true } : {}), answer: answer.trim() };
       } catch (e) { tried.push(`${prov}: ${String(e.message).slice(0, 140)}`); }

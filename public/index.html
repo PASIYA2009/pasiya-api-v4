@@ -170,7 +170,8 @@ input:focus{border-color:var(--primary)}
 .sw input:focus-visible+.track{outline:2px solid var(--primary);outline-offset:2px}
 .chip{font:800 10px var(--sans);letter-spacing:.06em;padding:4px 8px;border-radius:999px;border:1px solid}
 .chip.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,var(--line))}.chip.fail{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}.chip.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}.chip.skip{color:var(--muted);border-color:var(--line)}
-#apiRows{max-height:460px;overflow:auto}#apiRows .rowi{align-items:flex-start}#apiRows .rowi>span:first-child{min-width:0}
+#hcMsg,#featMsg{min-height:2.8em}
+#apiRows{max-height:460px;overflow:auto;overflow-anchor:none}#apiRows .rowi{align-items:flex-start}#apiRows .rowi>span:first-child{min-width:0}
 @media(max-width:1000px){.api-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){
   .layout{grid-template-columns:1fr}
@@ -453,8 +454,15 @@ function renderList() {
 }
 $('#search').oninput = (e) => { S.q = e.target.value.trim(); renderList(); };
 async function loadCatalog() {
-  try { S.catalog = (await (await fetch('/api/catalog')).json()).apis || []; } catch { $('#list').innerHTML = '<div class="empty">Could not load the API list. Check your connection and reload.</div>'; return; }
+  let apis;
+  try { apis = (await (await fetch('/api/catalog', { cache: 'no-store' })).json()).apis || []; }
+  catch { if (!S.catalog.length) $('#list').innerHTML = '<div class="empty">Could not load the API list. Check your connection and reload.</div>'; return; } // a failed refresh keeps the list that is already shown
+  if (S.catalogKey === JSON.stringify(apis.map((a) => a.path))) return; // nothing changed: do not touch the page
+  S.catalogKey = JSON.stringify(apis.map((a) => a.path)); S.catalog = apis;
+  if (S.cat !== 'All' && !apis.some((a) => a.category === S.cat)) S.cat = 'All';
+  const sx = window.scrollX, sy = window.scrollY, box = $('#list'); box.style.minHeight = box.offsetHeight + 'px';
   renderFilters(); renderList();
+  box.style.minHeight = ''; window.scrollTo({ left: sx, top: sy, behavior: 'instant' });
 }
 
 // test terminal
@@ -634,8 +642,10 @@ function updateApiCounts() {
   $('#hcOffFailed').disabled = !A.apis.some((a) => A.hc[a.path]?.state === 'fail' && !A.off.has(a.path));
 }
 async function saveFeatures(body, msgEl) {
-  try { await authed('/api/admin/features', { method: 'POST', body: JSON.stringify(body) }); $(msgEl).textContent = 'Saved. Everyone sees the change within about 20 seconds.'; }
+  const sy = window.scrollY;
+  try { await authed('/api/admin/features', { method: 'POST', body: JSON.stringify(body) }); $(msgEl).textContent = 'Saved. Users stop seeing a switched-off API within about 30 seconds.'; loadCatalog(); }
   catch (e) { $(msgEl).textContent = e.message; await loadFeatures(); }
+  window.scrollTo({ top: sy, behavior: 'instant' });
 }
 const saveApis = () => { clearTimeout(A.t); A.t = setTimeout(() => saveFeatures({ disabledApis: [...A.off] }, '#hcMsg'), 400); };
 async function loadFeatures() {
@@ -694,7 +704,8 @@ addEventListener('load', () => { const s = document.createElement('script'); s.s
 $('#year').textContent = new Date().getFullYear();
 renderStatus(null); renderUser(); loadCatalog(); loadStatus(); initAuth();
 setInterval(loadStatus, 30000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) loadStatus(); });
+setInterval(() => { if (!document.hidden) loadCatalog(); }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadStatus(); loadCatalog(); } });
 </script>
 </body>
 </html>

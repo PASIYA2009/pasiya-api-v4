@@ -75,8 +75,8 @@ async function webcheck(p) {
   return { url: u.toString(), status: r.status, responseMs: ms, server: h('server') || null, title, description: desc, h1Count: h1, images: imgs.length, imagesWithoutAlt: noAlt, securityHeaders: sec, score: Math.round((checks.filter((c) => c[1]).length / checks.length) * 100), checks: checks.map(([name, ok]) => ({ name, ok })) };
 }
 
-// ---- Temporary e-mail on mail.tm / mail.gw (free, no key, same API; if one is down the other is used). The mailbox "id" packs provider + address + password, so nothing is stored on our side. ----
-const MAILS = { tm: 'https://api.mail.tm', gw: 'https://api.mail.gw' };
+// ---- Temporary e-mail on Guerrilla Mail (first), mail.tm and mail.gw (all free, no key; if one is down the next is used). The mailbox "id" packs provider + address + password, so nothing is stored on our side. ----
+const MAILS = { tm: 'https://api.mail.tm', gw: 'https://api.mail.gw', gm: 'https://api.guerrillamail.com' };
 const pack = (v, a, pw) => Buffer.from(`${v}|${a}|${pw}`).toString('base64url');
 const unpack = (id) => {
   const parts = Buffer.from(String(id || ''), 'base64url').toString().split('|');
@@ -95,10 +95,45 @@ const mt = async (v, path, opts = {}, tok) => {
   if (!r.ok) throw new HttpError(502, 'Mail service error (HTTP ' + r.status + ').');
   return d;
 };
+// ---- Guerrilla Mail (id = gm | address | session token). The session token can expire; it is rebuilt from the address when that happens. ----
+const GM = 'https://api.guerrillamail.com/ajax.php';
+const gmCall = async (q) => {
+  const u = new URL(GM); for (const [k, val] of Object.entries({ ip: '127.0.0.1', agent: 'PASIYA-API', ...q })) u.searchParams.set(k, val);
+  const r = await fetchT(u, { headers: { Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; PASIYA-API)' } }, 10000);
+  if (!r.ok) throw new HttpError(r.status === 429 ? 429 : 502, 'Guerrilla Mail error (HTTP ' + r.status + ').');
+  const d = await r.json().catch(() => null);
+  if (!d || typeof d !== 'object') throw new HttpError(502, 'Guerrilla Mail sent an unreadable answer.');
+  return d;
+};
+async function gmSession(address, sid) { // returns a working { sid, address }
+  if (sid) { const d = await gmCall({ f: 'get_email_address', sid_token: sid }).catch(() => null); if (d?.email_addr && d.email_addr.split('@')[0] === address.split('@')[0]) return { sid: d.sid_token || sid, address: d.email_addr }; }
+  const d = await gmCall({ f: 'set_email_user', email_user: address.split('@')[0], lang: 'en', site: 'guerrillamail.com' });
+  if (!d.email_addr || !d.sid_token) throw new HttpError(401, 'Mailbox session expired. Create a new one with /api/tempmail/random.');
+  return { sid: d.sid_token, address: d.email_addr };
+}
+async function gmRandom() {
+  const d = await gmCall({ f: 'get_email_address', lang: 'en' });
+  if (!d.email_addr || !d.sid_token) throw new HttpError(502, 'Guerrilla Mail gave no address.');
+  return { address: d.email_addr, id: pack('gm', d.email_addr, d.sid_token), provider: 'guerrillamail', note: 'Keep the id. Use it with /api/tempmail/mailbox?id=...' };
+}
+const gmDate = (t) => (t ? new Date(Number(t) * 1000).toISOString() : null);
+async function gmBox(address, sid) {
+  let ses = await gmSession(address, sid), d = await gmCall({ f: 'check_email', seq: '0', sid_token: ses.sid });
+  if (!Array.isArray(d.list)) { ses = await gmSession(address, null); d = await gmCall({ f: 'check_email', seq: '0', sid_token: ses.sid }); }
+  const list = (d.list || []).filter((x) => x.mail_id && String(x.mail_id) !== '1' || x.mail_from !== 'no-reply@guerrillamail.com'); // hide the built-in welcome mail
+  return { address: ses.address, count: list.length, messages: list.map((x) => ({ id: String(x.mail_id), from: x.mail_from, subject: x.mail_subject, intro: x.mail_excerpt, seen: String(x.mail_read) === '1', receivedAt: gmDate(x.mail_timestamp) })) };
+}
+async function gmMsg(address, sid, mid) {
+  const ses = await gmSession(address, sid), x = await gmCall({ f: 'fetch_email', email_id: mid, sid_token: ses.sid });
+  if (!x.mail_id) throw new HttpError(404, 'Not found.');
+  return { address: ses.address, from: x.mail_from, to: x.mail_recipient || ses.address, subject: x.mail_subject, receivedAt: gmDate(x.mail_timestamp), text: String(x.mail_body || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), html: x.mail_body, attachments: (x.att_info || []).map((a) => ({ name: a.f, size: a.s })) };
+}
+
 const login = async (id) => { const [v, address, password] = unpack(id); return { v, address, token: (await mt(v, '/token', { method: 'POST', body: JSON.stringify({ address, password }) })).token }; };
 async function tmRandom() {
   const rnd = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((x) => 'abcdefghijklmnopqrstuvwxyz0123456789'[x % 36]).join('');
   const errs = [];
+  try { return await gmRandom(); } catch (e) { errs.push('guerrillamail: ' + e.message); }
   for (const v of ['tm', 'gw']) {
     try {
       const dom = (await mt(v, '/domains'))['hydra:member']?.[0]?.domain; if (!dom) throw new HttpError(502, 'No mail domain available.');
@@ -110,13 +145,17 @@ async function tmRandom() {
   throw new HttpError(502, 'No temp-mail service answered (' + errs.join('; ') + ').');
 }
 async function tmBox(p) {
+  const [v0, a0, s0] = unpack(p.id); if (v0 === 'gm') return gmBox(a0, s0);
   const { v, address, token } = await login(p.id);
   const d = await mt(v, '/messages?page=1', {}, token);
   return { address, count: d['hydra:totalItems'] ?? 0, messages: (d['hydra:member'] || []).map((x) => ({ id: x.id, from: x.from?.address, subject: x.subject, intro: x.intro, seen: x.seen, receivedAt: x.createdAt })) };
 }
 async function tmMsg(p) {
+  const mid = String(p.mid || '').trim();
+  const [v0, a0, s0] = unpack(p.id);
+  if (v0 === 'gm') { if (!/^[0-9]{1,15}$/.test(mid)) throw new HttpError(400, 'mid (message id from the mailbox list) is required.'); return gmMsg(a0, s0, mid); }
   const { v, address, token } = await login(p.id);
-  const mid = String(p.mid || '').trim(); if (!/^[A-Za-z0-9_-]{6,64}$/.test(mid)) throw new HttpError(400, 'mid (message id from the mailbox list) is required.');
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(mid)) throw new HttpError(400, 'mid (message id from the mailbox list) is required.');
   const x = await mt(v, '/messages/' + mid, {}, token);
   return { address, from: x.from, to: x.to, subject: x.subject, receivedAt: x.createdAt, text: x.text, html: Array.isArray(x.html) ? x.html.join('') : x.html, attachments: (x.attachments || []).map((a) => ({ name: a.filename, size: a.size })) };
 }
@@ -128,7 +167,7 @@ export default [
   { path: '/api/tools/tts', category: 'Utility', name: 'Text to Speech', cost: 0, isNew: true, desc: 'Turn Sinhala (or any language) text into MP3 speech links, up to 3000 characters', params: [param('text', 'ආයුබෝවන්', 'Text to speak'), param('lang', 'si', 'si, en, ta, ja ...', false)], run: tts },
   { path: '/api/tools/tinyurl', category: 'Utility', name: 'TinyURL', cost: 0, isNew: true, desc: 'Shorten links with TinyURL', params: [param('url', 'https://example.com/a/very/long/link', 'Link to shorten')], run: tiny },
   { path: '/api/tools/webcheck', category: 'Utility', name: 'WebCheck', cost: 0, isNew: true, desc: 'Quick SEO & security-header audit of one public page', params: [param('url', 'https://example.com', 'Website address')], run: webcheck },
-  { path: '/api/tempmail/random', category: 'Utility', name: 'Tempmail: Random', cost: 0, isNew: true, desc: 'Generate an instant disposable email address', params: [], run: tmRandom },
+  { path: '/api/tempmail/random', category: 'Utility', name: 'Tempmail: Random', cost: 0, isNew: true, desc: 'Generate an instant disposable email address (Guerrilla Mail, with mail.tm / mail.gw as backup)', params: [], run: tmRandom },
   { path: '/api/tempmail/mailbox', category: 'Utility', name: 'Tempmail: Mailbox', cost: 0, isNew: true, desc: 'List inbox messages of a temp mailbox', params: [ID], run: tmBox },
   { path: '/api/tempmail/message', category: 'Utility', name: 'Tempmail: Message', cost: 0, isNew: true, desc: 'Read one temp email with full text/HTML body', params: [ID, param('mid', '', 'Message id from the mailbox list')], run: tmMsg }
 ];

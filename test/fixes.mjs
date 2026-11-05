@@ -5,8 +5,16 @@ const j = (o, s = 200) => new Response(JSON.stringify(o), { status: s, headers: 
 const RSS = (t) => `<rss><channel><item><title>${t}</title><link>https://x.lk/1</link></item></channel></rss>`;
 const BINGRSS = `<rss><channel><item><title>Bing hit</title><link>https://www.bing.com/news/apiclick.aspx?ref=x&amp;url=https%3A%2F%2Flankadeepa.lk%2Fa1</link></item></channel></rss>`;
 let log = [];
+let GM = false, gmSid = 'sid1';
 globalThis.fetch = async (input, init = {}) => {
   const url = String(input?.url || input); log.push(url);
+  if (GM && url.startsWith('https://api.guerrillamail.com/ajax.php')) { // Guerrilla Mail mock
+    const q = new URL(url).searchParams, f = q.get('f');
+    if (f === 'get_email_address') return !q.get('sid_token') || q.get('sid_token') === gmSid ? j({ email_addr: 'abc123@sharklasers.com', sid_token: gmSid }) : j({ email_addr: 'zzz999@sharklasers.com', sid_token: 'new' });
+    if (f === 'set_email_user') { gmSid = 'sid2'; return j({ email_addr: q.get('email_user') + '@sharklasers.com', sid_token: gmSid }); }
+    if (f === 'check_email') return q.get('sid_token') === gmSid ? j({ list: [{ mail_id: '1', mail_from: 'no-reply@guerrillamail.com', mail_subject: 'Welcome' }, { mail_id: '77', mail_from: 'a@b.c', mail_subject: 'Code 123', mail_excerpt: 'hi', mail_timestamp: '1700000000', mail_read: '0' }] }) : j({ auth: { success: false } });
+    if (f === 'fetch_email') return j({ mail_id: '77', mail_from: 'a@b.c', mail_subject: 'Code 123', mail_body: '<p>Your code is 123</p>', mail_timestamp: '1700000000' });
+  }
   // lankadeepa: own feeds all fail, Google News returns empty, Bing works
   if (url.includes('news.google.com')) return new Response('<rss><channel></channel></rss>');
   if (url.includes('bing.com/news/search')) return new Response(BINGRSS);
@@ -36,6 +44,12 @@ r = await run('/api/news/dinamina'); ok('news: moved feed found on alternate /fe
 r = await run('/api/search/web', { q: 'sri lanka' }); ok('web search: DDG 403 -> Bing RSS', r.engine === 'bing' && r.results[0].title === 'Bing web hit', r);
 r = await run('/api/tempmail/random'); ok('tempmail: mail.tm 500 -> mail.gw', r.address.endsWith('@gw.test') && r.provider === 'mail.gw', r);
 const box = await run('/api/tempmail/mailbox', { id: r.id }); ok('tempmail mailbox on mail.gw', box.count === 0 && box.address === r.address, box);
+GM = true;
+r = await run('/api/tempmail/random'); ok('tempmail: Guerrilla Mail is used first', r.provider === 'guerrillamail' && r.address === 'abc123@sharklasers.com', r);
+let gbox = await run('/api/tempmail/mailbox', { id: r.id }); ok('tempmail mailbox (Guerrilla), welcome mail hidden', gbox.count === 1 && gbox.messages[0].id === '77' && gbox.messages[0].subject === 'Code 123', gbox);
+const gmsg = await run('/api/tempmail/message', { id: r.id, mid: '77' }); ok('tempmail message (Guerrilla)', gmsg.subject === 'Code 123' && gmsg.text === 'Your code is 123', gmsg);
+gmSid = 'expired'; gbox = await run('/api/tempmail/mailbox', { id: r.id }); ok('tempmail: expired Guerrilla session is rebuilt', gbox.count === 1, gbox);
+GM = false;
 log = [];
 r = await run('/api/ai/llama', { prompt: 'hi' }, { GROQ_API_KEY: 'a', CEREBRAS_API_KEY: 'b' });
 ok('ai: groq fails -> cerebras answers, pollinations untouched', r.provider === 'cerebras' && r.answer === 'from cerebras' && !log.some((u) => u.includes('pollinations')), r);
