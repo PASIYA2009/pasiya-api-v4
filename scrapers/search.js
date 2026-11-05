@@ -1,5 +1,6 @@
 // Keyless search endpoints. They use public, key-free services (Wallhaven, Openverse, Wikimedia, DuckDuckGo).
 import { HttpError, fetchT, cached, clamp, stripHtml, decodeEntities, param } from '../system/util.js';
+import { parseRss } from './news.js';
 
 const UA = 'PASIYA-API/3.2 (https://vercel.com; keyless search)';
 const need = (p, k = 'q') => { const v = String(p[k] || p.query || '').trim(); if (!v || v.length > 120) throw new HttpError(400, `${k} is required (max 120 characters).`); return v; };
@@ -38,12 +39,25 @@ async function wikipedia(p) {
   return { query: q, language: lang, results: (d.query?.search || []).map((x) => ({ title: x.title, snippet: stripHtml(x.snippet), url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(x.title.replace(/ /g, '_'))}`, words: x.wordcount })) };
 }
 
-// ---- web search (DuckDuckGo HTML page; datacenter IPs are sometimes blocked, then a clear error is returned) ----
-async function web(p) {
-  const q = need(p), limit = clamp(p.limit, 1, 20, 10);
+// ---- web search: several engines, first one that answers wins (datacenter IPs are often blocked by a single engine) ----
+// 1) Brave Search API (BRAVE_API_KEY, free plan)  2) Bing RSS (keyless)  3) DuckDuckGo HTML / Lite (keyless)
+const BROWSER = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+async function braveSearch(q, limit, env) {
+  const r = await fetchT(`https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(q)}&count=${limit}`, { headers: { Accept: 'application/json', 'X-Subscription-Token': env.BRAVE_API_KEY } }, 10000);
+  if (!r.ok) throw new Error('Brave HTTP ' + r.status);
+  const d = await r.json();
+  return (d.web?.results || []).map((x) => ({ title: stripHtml(x.title), url: x.url, snippet: stripHtml(x.description || '') }));
+}
+async function bingRss(q, limit) {
+  const r = await fetchT(`https://www.bing.com/search?format=rss&q=${encodeURIComponent(q)}&count=${limit}`, { headers: { 'User-Agent': BROWSER, 'Accept-Language': 'en-US,en;q=0.9' } }, 10000);
+  if (!r.ok) throw new Error('Bing HTTP ' + r.status);
+  const items = parseRss(await r.text(), limit);
+  return items.map((x) => ({ title: x.title, url: x.link, snippet: x.summary || '' }));
+}
+async function ddgHtml(q, limit) {
   const html = await cached('ddg:' + q, 300, async () => {
-    const r = await fetchT('https://html.duckduckgo.com/html/', { method: 'POST', headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36', 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ q }) }, 12000);
-    if (!r.ok) throw new HttpError(502, 'Web search answered HTTP ' + r.status);
+    const r = await fetchT('https://html.duckduckgo.com/html/', { method: 'POST', headers: { 'User-Agent': BROWSER, 'Content-Type': 'application/x-www-form-urlencoded', Referer: 'https://html.duckduckgo.com/', 'Accept-Language': 'en-US,en;q=0.9' }, body: new URLSearchParams({ q }) }, 10000);
+    if (!r.ok) throw new Error('DuckDuckGo HTTP ' + r.status);
     return r.text();
   });
   const out = [];
@@ -55,8 +69,20 @@ async function web(p) {
     if (!/^https?:\/\//.test(href)) continue;
     out.push({ title: stripHtml(m[2]), url: href, snippet: stripHtml(block.match(/class="result__snippet"[^>]*>([\s\S]*?)<\/(?:a|td|div)>/i)?.[1] || '') });
   }
-  if (!out.length) throw new HttpError(502, 'Web search returned nothing (the search engine may be blocking this server). Try again later.');
-  return { query: q, count: out.length, results: out };
+  return out;
+}
+async function web(p, env = {}) {
+  const q = need(p), limit = clamp(p.limit, 1, 20, 10);
+  const engines = [...(env.BRAVE_API_KEY ? [['brave', () => braveSearch(q, limit, env)]] : []), ['bing', () => bingRss(q, limit)], ['duckduckgo', () => ddgHtml(q, limit)]];
+  const errs = [];
+  for (const [name, fn] of engines) {
+    try {
+      const results = (await cached('web:' + name + ':' + q + ':' + limit, 300, fn)).slice(0, limit);
+      if (results.length) return { query: q, engine: name, count: results.length, results };
+      errs.push(name + ': no results');
+    } catch (e) { errs.push(name + ': ' + e.message); }
+  }
+  throw new HttpError(502, 'Web search is not answering right now (' + errs.join('; ') + '). Add a free BRAVE_API_KEY for a stable engine.');
 }
 
 // ---- Sri Lankan past papers (paperhub.lk, WordPress search) ----
@@ -68,7 +94,7 @@ async function paperhub(p) {
 
 const Q = (ex) => [param('q', ex, 'Search text'), param('limit', '12', 'Max results', false)];
 export default [
-  { path: '/api/search/web', category: 'Search', name: 'Web Search', cost: 0, isNew: true, desc: 'Search the web (DuckDuckGo, no key)', params: Q('sri lanka tourism'), run: web },
+  { path: '/api/search/web', category: 'Search', name: 'Web Search', cost: 0, isNew: true, desc: 'Search the web (Bing / DuckDuckGo with no key, Brave if BRAVE_API_KEY is set)', params: Q('sri lanka tourism'), run: web },
   { path: '/api/search/wikipedia', category: 'Search', name: 'Wikipedia Search', cost: 0, isNew: true, desc: 'Search Wikipedia articles (any language code)', params: [param('q', 'Sigiriya', 'Search text'), param('lang', 'en', 'en, si, ta ...', false), param('limit', '5', 'Max 20', false)], run: wikipedia },
   { path: '/api/search/wallpaper', category: 'Search', name: 'Wallpaper: 4K', cost: 0, isNew: true, desc: 'Find 4K wallpapers', params: Q('nature'), run: wall('&atleast=3840x2160') },
   { path: '/api/search/wallpaper2', category: 'Search', name: 'Wallpaper: Mobile', cost: 0, isNew: true, desc: 'Find portrait phone wallpapers', params: Q('mountains'), run: wall('&ratios=portrait&atleast=1080x1920') },

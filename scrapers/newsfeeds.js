@@ -44,21 +44,42 @@ const SITES = [
   ['engadget', 'tech', 'Engadget', 'Technology News & Reviews', 'https://www.engadget.com/rss.xml', 'engadget.com']
 ];
 const PREFIX = { sl: 'News', world: 'News', tech: 'Tech', techsl: 'Tech (SL)' };
-const UA = 'Mozilla/5.0 (compatible; PASIYA-API/3.2; +https://vercel.com)';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+const SI_SITES = new Set(['adaderana', 'lankadeepa', 'dinamina', 'mawbima', 'divaina', 'silumina', 'siyatha', 'nethnews', 'androidwedakarayo', 'techkatha', 'roar_tech', 'bbc', 'gossiplankanews', 'itnnews']);
 
-async function pull(url) {
-  const r = await fetchT(url, { headers: { 'User-Agent': UA, Accept: 'application/rss+xml,application/atom+xml,application/xml,text/xml,*/*' }, redirect: 'follow' }, 9000);
+// Google News (Sinhala + English editions, 7 days) and Bing News (RSS). Bing wraps links, so the real address is unwrapped.
+const GNX = (site, si) => `https://news.google.com/rss/search?q=${encodeURIComponent('site:' + site + ' when:7d')}&hl=${si ? 'si' : 'en-LK'}&gl=LK&ceid=LK:${si ? 'si' : 'en'}`;
+const BING = (site) => `https://www.bing.com/news/search?q=${encodeURIComponent('site:' + site)}&format=rss&setlang=en`;
+const unwrapBing = (items) => items.map((x) => { try { const u = new URL(x.link); return u.hostname.endsWith('bing.com') && u.searchParams.get('url') ? { ...x, link: u.searchParams.get('url') } : x; } catch { return x; } });
+
+async function pull(url, ms = 7000) {
+  const r = await fetchT(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9', Accept: 'application/rss+xml,application/atom+xml,application/xml,text/xml;q=0.9,*/*;q=0.8' }, redirect: 'follow' }, ms);
   if (!r.ok) throw new HttpError(502, 'Feed answered HTTP ' + r.status);
-  const items = parseRss(await r.text(), 40);
+  const items = unwrapBing(parseRss(await r.text(), 40));
   if (!items.length) throw new HttpError(502, 'Feed had no articles.');
   return items;
 }
+// Many Sri Lankan sites moved their feed address: try the listed one, then the usual WordPress / generic paths on the same site (all at once, first good answer wins).
+function ownFeeds(feedUrl, site) {
+  const host = site.split('/')[0], list = [feedUrl];
+  for (const base of new Set([new URL(feedUrl).origin, 'https://' + host, 'https://www.' + host.replace(/^www\./, '')])) {
+    for (const path of ['/feed/', '/feed', '/rss', '/rss.xml', '/?feed=rss2', '/feeds/posts/default?alt=rss', '/index.php/feed']) list.push(base + path);
+  }
+  return [...new Set(list)];
+}
+const firstGood = (urls, ms) => Promise.any(urls.map((u) => pull(u, ms)));
 export async function siteFeed(slug) {
   const s = SITES.find((x) => x[0] === slug);
   return cached('nf:' + slug, 300, async () => {
-    let items, via = 'rss';
-    try { items = await pull(s[4]); }
-    catch (e) { items = await pull(GN(s[5])); via = 'google-news'; }
+    const si = SI_SITES.has(slug);
+    const tiers = [
+      ['rss', () => firstGood(ownFeeds(s[4], s[5]).slice(0, 8), 6000)],
+      ['google-news', () => firstGood([GNX(s[5], si), GNX(s[5], !si)], 8000)],
+      ['bing-news', () => pull(BING(s[5]), 8000)]
+    ];
+    let items, via, last;
+    for (const [name, fn] of tiers) { try { items = await fn(); via = name; break; } catch (e) { last = e; } }
+    if (!items) throw new HttpError(502, 'No feed for this site right now (own feed, Google News and Bing News all returned nothing).');
     return { name: s[2], via, items: items.map((x) => ({ ...x, source: s[2], sourceId: slug })) };
   });
 }

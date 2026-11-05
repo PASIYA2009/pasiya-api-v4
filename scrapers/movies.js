@@ -60,7 +60,14 @@ async function imdbTrending(t) { // keyless: IMDb "most popular" chart (JSON-LD 
     for (const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
       try { const j = JSON.parse(m[1]); if (Array.isArray(j.itemListElement)) { list = j.itemListElement; break; } } catch { /* next block */ }
     }
-    if (!list.length) throw new HttpError(502, 'Movie source returned an unexpected page. Try again later.');
+    if (!list.length) { // IMDb now ships the chart inside __NEXT_DATA__
+      try {
+        const nd = JSON.parse(html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i)?.[1] || '');
+        const edges = nd.props?.pageProps?.pageData?.chartTitles?.edges || [];
+        list = edges.map((e) => e.node).filter(Boolean).map((n) => ({ url: '/title/' + n.id + '/', name: n.titleText?.text, alternateName: n.originalTitleText?.text, image: n.primaryImage?.url, aggregateRating: n.ratingsSummary ? { ratingValue: n.ratingsSummary.aggregateRating, ratingCount: n.ratingsSummary.voteCount } : null }));
+      } catch { /* handled below */ }
+    }
+    if (!list.length) throw new HttpError(502, 'Movie source returned an unexpected page. Add a free TMDB_API_KEY for trending.');
     return list.slice(0, 20).map((e) => { const x = e.item || e; return {
       id: String(x.url || '').match(/tt\d+/)?.[0] || null, type: t, title: decodeEntities(x.name || ''), originalTitle: decodeEntities(x.alternateName || x.name || ''), year: null,
       overview: x.description ? decodeEntities(x.description) : null, rating: x.aggregateRating?.ratingValue || null, votes: x.aggregateRating?.ratingCount || 0, language: null, poster: x.image || null, backdrop: null }; }).filter((x) => x.id && x.title);
@@ -105,6 +112,6 @@ async function imdbDetails(id) {
 const T = param('type', 'movie', 'movie or tv', false);
 export default [
   { path: '/api/movie/search', category: 'Movies', name: 'Movie / TV search', cost: 1, desc: 'Titles, posters, ratings (TMDB, or keyless IMDb)', params: [param('q', 'Inception', 'Title'), T, param('year', '', 'Release year', false)], run: search },
-  { path: '/api/movie/details', category: 'Movies', name: 'Movie / TV details', cost: 1, desc: 'Cast, genres, runtime, trailer', params: [param('id', '27205', 'Id from search (TMDB number or IMDb tt...)'), T], run: details },
+  { path: '/api/movie/details', category: 'Movies', name: 'Movie / TV details', cost: 1, desc: 'Cast, genres, runtime, trailer', params: [param('id', 'tt1375666', 'Id from search (IMDb tt... works with no key; TMDB number needs TMDB_API_KEY)'), T], run: details },
   { path: '/api/movie/trending', category: 'Movies', name: 'Trending titles', cost: 1, desc: 'What is trending (TMDB, or keyless IMDb most-popular chart)', params: [T, param('window', 'week', 'day or week', false)], run: trending }
 ];

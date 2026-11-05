@@ -153,7 +153,7 @@ export async function account(req, env, p, m) {
         if (!(d.needsEnv ? d.needsEnv.every((k) => env[k]) : true)) return { path: d.path, state: 'skip', note: 'Not configured on this server.' };
         const t0 = Date.now(), params = Object.fromEntries((d.params || []).filter((x) => x.example !== '').map((x) => [x.name, x.example]));
         try {
-          await Promise.race([d.run(params, env, req), new Promise((_, rej) => setTimeout(() => rej(new HttpError(504, 'No answer in 14 seconds.')), 14000))]);
+          await Promise.race([d.run(params, env, req), new Promise((_, rej) => setTimeout(() => rej(new HttpError(504, 'No answer in 25 seconds.')), 25000))]);
           return { path: d.path, state: 'ok', ms: Date.now() - t0 };
         } catch (e) {
           const st = e instanceof HttpError ? e.status : 500;

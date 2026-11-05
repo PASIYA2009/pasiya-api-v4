@@ -40,25 +40,57 @@ export function ytId(raw) {
   if (!/^[\w-]{11}$/.test(id || '')) throw new HttpError(400, 'Could not find a video id in this YouTube link.');
   return id;
 }
+// YouTube blocks datacenter IPs for some app clients, so several official app clients are tried one after the other (the first one that gives playable links wins).
+const YT_CLIENTS = [
+  { id: '28', ver: '1.60.19', ua: 'com.google.android.apps.youtube.vr.oculus/1.60.19 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip', ctx: { clientName: 'ANDROID_VR', clientVersion: '1.60.19', deviceMake: 'Oculus', deviceModel: 'Quest 3', androidSdkVersion: 32, osName: 'Android', osVersion: '12L', hl: 'en', gl: 'US' } },
+  { id: '5', ver: '19.45.4', ua: 'com.google.ios.youtube/19.45.4 (iPhone16,2; U; CPU iOS 18_1_0 like Mac OS X;)', ctx: { clientName: 'IOS', clientVersion: '19.45.4', deviceMake: 'Apple', deviceModel: 'iPhone16,2', osName: 'iPhone', osVersion: '18.1.0.22B83', hl: 'en', gl: 'US' } },
+  { id: '3', ver: '19.09.37', ua: 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip', ctx: { clientName: 'ANDROID', clientVersion: '19.09.37', androidSdkVersion: 30, hl: 'en', gl: 'US' } }
+];
+const hasLinks = (d) => [...(d.streamingData?.formats || []), ...(d.streamingData?.adaptiveFormats || [])].some((f) => f.url);
 export const ytPlayer = (id) => cached('dl:yt:' + id, 600, async () => {
-    const r = await fetchT('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip', 'X-YouTube-Client-Name': '3', 'X-YouTube-Client-Version': '19.09.37' },
-      body: JSON.stringify({ videoId: id, contentCheckOk: true, racyCheckOk: true, context: { client: { clientName: 'ANDROID', clientVersion: '19.09.37', androidSdkVersion: 30, hl: 'en', gl: 'US' } } })
-    }, 20000);
-    if (!r.ok) throw new HttpError(502, 'YouTube is not answering right now.');
-    return r.json();
-  });
-export async function youtube(p) {
+  let blocked = null;
+  for (const c of YT_CLIENTS) {
+    try {
+      const r = await fetchT('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': c.ua, 'X-YouTube-Client-Name': c.id, 'X-YouTube-Client-Version': c.ver },
+        body: JSON.stringify({ videoId: id, contentCheckOk: true, racyCheckOk: true, context: { client: c.ctx } })
+      }, 9000);
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (d.playabilityStatus?.status === 'OK' && hasLinks(d)) return d;
+      if (d.playabilityStatus?.status === 'ERROR' || d.playabilityStatus?.status === 'UNPLAYABLE') return d; // real "not available": no need to try other clients
+      blocked = blocked || d; // LOGIN_REQUIRED (bot check) or no links: try the next client
+    } catch { /* next client */ }
+  }
+  if (blocked) return blocked;
+  throw new HttpError(502, 'YouTube is not answering right now.');
+});
+// Optional third-party fallback: a cobalt server (self-hosted or any instance you have a key for). Set COBALT_API_URL (+ COBALT_API_KEY).
+async function cobalt(env, url, type) {
+  const r = await fetchT(env.COBALT_API_URL.replace(/\/$/, '') + '/', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(env.COBALT_API_KEY ? { Authorization: 'Api-Key ' + env.COBALT_API_KEY } : {}) },
+    body: JSON.stringify({ url, downloadMode: type === 'audio' ? 'audio' : 'auto', videoQuality: '720' })
+  }, 20000);
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok || !d.url || !['tunnel', 'redirect'].includes(d.status)) throw new HttpError(502, 'Cobalt fallback failed: ' + (d.error?.code || 'HTTP ' + r.status));
+  return d;
+}
+export async function youtube(p, env = {}) {
   const type = guard(p), id = ytId(p.url);
-  const d = await ytPlayer(id);
+  const viaCobalt = async (why) => {
+    if (!env.COBALT_API_URL) throw new HttpError(503, why);
+    const d = await cobalt(env, `https://www.youtube.com/watch?v=${id}`, type);
+    return out('youtube', null, type, type === 'audio' ? 'mp3' : 'mp4', d.url);
+  };
+  let d;
+  try { d = await ytPlayer(id); } catch (e) { return viaCobalt('YouTube is not answering right now. Connect a downloader (SCRAPER_URL or COBALT_API_URL).'); }
   const st = d.playabilityStatus?.status;
   if (st === 'ERROR' || st === 'UNPLAYABLE') throw new HttpError(404, 'Video not found or not available.');
-  if (st === 'LOGIN_REQUIRED') throw new HttpError(503, 'YouTube asked this server to sign in (bot check). Connect the separate downloader service (SCRAPER_URL) for YouTube.');
   const sd = d.streamingData || {}, title = d.videoDetails?.title;
   let pick;
   if (type === 'audio') pick = (sd.adaptiveFormats || []).filter((f) => f.url && /^audio\/mp4/.test(f.mimeType || '')).sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
   else pick = (sd.formats || []).filter((f) => f.url && /^video\/mp4/.test(f.mimeType || '')).sort((a, b) => (b.height || 0) - (a.height || 0))[0];
-  if (!pick) throw new HttpError(503, 'YouTube gave no direct link for this video from this server. Connect the separate downloader service (SCRAPER_URL).');
+  if (!pick) return viaCobalt(st === 'LOGIN_REQUIRED' ? 'YouTube asked this server to sign in (bot check). Connect a downloader (SCRAPER_URL or COBALT_API_URL).' : 'YouTube gave no direct link for this video from this server. Connect a downloader (SCRAPER_URL or COBALT_API_URL).');
   const o = out('youtube', title, type, type === 'audio' ? 'm4a' : 'mp4', pick.url);
   o.download.filesize = Number(pick.contentLength) || null;
   return o;

@@ -75,12 +75,19 @@ async function webcheck(p) {
   return { url: u.toString(), status: r.status, responseMs: ms, server: h('server') || null, title, description: desc, h1Count: h1, images: imgs.length, imagesWithoutAlt: noAlt, securityHeaders: sec, score: Math.round((checks.filter((c) => c[1]).length / checks.length) * 100), checks: checks.map(([name, ok]) => ({ name, ok })) };
 }
 
-// ---- Temporary e-mail on mail.tm (free, no key). The mailbox "id" is just address + password packed in base64url, so nothing is stored on our side. ----
-const MT = 'https://api.mail.tm';
-const pack = (a, pw) => Buffer.from(a + '|' + pw).toString('base64url');
-const unpack = (id) => { const [a, pw] = Buffer.from(String(id || ''), 'base64url').toString().split('|'); if (!a || !pw || !a.includes('@')) throw new HttpError(400, 'Invalid mailbox id. Use the id returned by /api/tempmail/random.'); return [a, pw]; };
-const mt = async (path, opts = {}, tok) => {
-  const r = await fetchT(MT + path, { ...opts, headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...(tok ? { Authorization: 'Bearer ' + tok } : {}) } }, 12000);
+// ---- Temporary e-mail on mail.tm / mail.gw (free, no key, same API; if one is down the other is used). The mailbox "id" packs provider + address + password, so nothing is stored on our side. ----
+const MAILS = { tm: 'https://api.mail.tm', gw: 'https://api.mail.gw' };
+const pack = (v, a, pw) => Buffer.from(`${v}|${a}|${pw}`).toString('base64url');
+const unpack = (id) => {
+  const parts = Buffer.from(String(id || ''), 'base64url').toString().split('|');
+  const [v, a, pw] = parts.length === 2 ? ['tm', ...parts] : parts; // old 2-part ids = mail.tm
+  if (!MAILS[v] || !a || !pw || !a.includes('@')) throw new HttpError(400, 'Invalid mailbox id. Use the id returned by /api/tempmail/random.');
+  return [v, a, pw];
+};
+const mt = async (v, path, opts = {}, tok) => {
+  const doFetch = () => fetchT(MAILS[v] + path, { ...opts, headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'User-Agent': 'Mozilla/5.0 (compatible; PASIYA-API)', ...(tok ? { Authorization: 'Bearer ' + tok } : {}) } }, 12000);
+  let r = await doFetch();
+  if (r.status >= 500 || r.status === 429) { await new Promise((ok) => setTimeout(ok, 700)); r = await doFetch(); } // one quick retry
   const d = await r.json().catch(() => ({}));
   if (r.status === 401) throw new HttpError(401, 'Mailbox login failed (wrong id or the mailbox was deleted).');
   if (r.status === 404) throw new HttpError(404, 'Not found.');
@@ -88,23 +95,29 @@ const mt = async (path, opts = {}, tok) => {
   if (!r.ok) throw new HttpError(502, 'Mail service error (HTTP ' + r.status + ').');
   return d;
 };
-const login = async (id) => { const [address, password] = unpack(id); return { address, token: (await mt('/token', { method: 'POST', body: JSON.stringify({ address, password }) })).token }; };
+const login = async (id) => { const [v, address, password] = unpack(id); return { v, address, token: (await mt(v, '/token', { method: 'POST', body: JSON.stringify({ address, password }) })).token }; };
 async function tmRandom() {
-  const dom = (await mt('/domains'))['hydra:member']?.[0]?.domain; if (!dom) throw new HttpError(502, 'No mail domain available right now.');
   const rnd = (n) => [...crypto.getRandomValues(new Uint8Array(n))].map((x) => 'abcdefghijklmnopqrstuvwxyz0123456789'[x % 36]).join('');
-  const address = `${rnd(10)}@${dom}`, password = rnd(16);
-  await mt('/accounts', { method: 'POST', body: JSON.stringify({ address, password }) });
-  return { address, id: pack(address, password), note: 'Keep the id. Use it with /api/tempmail/mailbox?id=...' };
+  const errs = [];
+  for (const v of ['tm', 'gw']) {
+    try {
+      const dom = (await mt(v, '/domains'))['hydra:member']?.[0]?.domain; if (!dom) throw new HttpError(502, 'No mail domain available.');
+      const address = `${rnd(10)}@${dom}`, password = rnd(16);
+      await mt(v, '/accounts', { method: 'POST', body: JSON.stringify({ address, password }) });
+      return { address, id: pack(v, address, password), provider: 'mail.' + v, note: 'Keep the id. Use it with /api/tempmail/mailbox?id=...' };
+    } catch (e) { errs.push(`mail.${v}: ${e.message}`); }
+  }
+  throw new HttpError(502, 'No temp-mail service answered (' + errs.join('; ') + ').');
 }
 async function tmBox(p) {
-  const { address, token } = await login(p.id);
-  const d = await mt('/messages?page=1', {}, token);
+  const { v, address, token } = await login(p.id);
+  const d = await mt(v, '/messages?page=1', {}, token);
   return { address, count: d['hydra:totalItems'] ?? 0, messages: (d['hydra:member'] || []).map((x) => ({ id: x.id, from: x.from?.address, subject: x.subject, intro: x.intro, seen: x.seen, receivedAt: x.createdAt })) };
 }
 async function tmMsg(p) {
-  const { address, token } = await login(p.id);
+  const { v, address, token } = await login(p.id);
   const mid = String(p.mid || '').trim(); if (!/^[A-Za-z0-9_-]{6,64}$/.test(mid)) throw new HttpError(400, 'mid (message id from the mailbox list) is required.');
-  const x = await mt('/messages/' + mid, {}, token);
+  const x = await mt(v, '/messages/' + mid, {}, token);
   return { address, from: x.from, to: x.to, subject: x.subject, receivedAt: x.createdAt, text: x.text, html: Array.isArray(x.html) ? x.html.join('') : x.html, attachments: (x.attachments || []).map((a) => ({ name: a.filename, size: a.size })) };
 }
 

@@ -31,6 +31,13 @@ Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 - Downloads are best effort (sites change; YouTube may refuse Vercel's datacenter IPs). For maximum reliability host the separate yt-dlp service (`pasiya-scraper-api`) and set `SCRAPER_URL` + `SCRAPER_SHARED_SECRET`: it then answers the download endpoints instead.
 - `maxDuration` is 30s in `vercel.json` (Hobby allows up to 60).
 
+## v4.0 (fix release)
+- **AI:** official-provider chain now also has Cerebras, Mistral, GitHub Models and Anthropic; Pollinations is last and its 45 s limit is remembered (no more 14 s timeouts). Set free keys (see `.env.example`). chatgpt.com / claude.ai themselves have no public API, so they are NOT scraped: official free APIs are the reliable way.
+- **News:** each site tries its own feed + common alternate paths, then Google News (Sinhala + English, 7 days), then Bing News.
+- **Web Search:** Brave (key) -> Bing RSS -> DuckDuckGo. **Tempmail:** mail.tm with mail.gw fallback. **YouTube DL:** 3 app clients + optional cobalt (`COBALT_API_URL`). **Movies:** details example now keyless (`tt...`), trending reads IMDb `__NEXT_DATA__`; a free `TMDB_API_KEY` is still best.
+- Health check timeout 25 s. Tests: `node test/run.mjs` and `node test/fixes.mjs`.
+- "NEEDS REAL INPUT" is normal: the example link in the test is fake, so that API is not proven broken.
+
 ## v3.9
 - **Admin Panel > Feature switches:** turn the Daily claim and the Lucky Spin on/off for everyone (stored in Firestore `settings/features`). They are shown ONLY to signed-in normal users: guests and admins never see them (the server blocks them too).
 - **Admin Panel > API manager:** *Run health check* tests every API from the live server (Vercel) in small batches; *Switch off failed* hides the broken ones from the catalog (they answer 503). Every API also has its own on/off switch. Admins can still test switched-off APIs.

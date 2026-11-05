@@ -1,95 +1,139 @@
-// Free / low-cost AI endpoints through OFFICIAL provider APIs (no scraping of chat websites).
+// AI endpoints through OFFICIAL provider APIs (no scraping of chat websites: chatgpt.com / claude.ai have no public API,
+// need a logged-in session + captcha tokens and break every few days, so they cannot be made reliable).
 // Each model name tries a chain of providers and uses the first one that is configured and answers.
-// Model ids change often, so every id can be overridden with environment variables (MODEL_GEMINI, MODEL_GPT_OPENROUTER, ...) without touching the code.
+// Add as many FREE keys as you like (see .env.example): the more keys, the more reliable. Model ids can be overridden with MODEL_* env vars.
 import { HttpError, fetchT, param } from '../system/util.js';
 
 const chains = (env) => withFree({
-  // Every model ends with the Cloudflare Workers AI fallback (free; set CF_ACCOUNT_ID + CF_API_TOKEN), so AI works even with no paid provider key.
   gemini: [['gemini', env.MODEL_GEMINI || 'gemini-2.5-flash'], ['workers-ai', env.MODEL_GEMINI_FALLBACK_CF || '@cf/meta/llama-3.3-70b-instruct-fp8-fast']],
   gpt: [
     ['openrouter', env.MODEL_GPT_OPENROUTER || 'openai/gpt-oss-20b:free'],
     ['groq', env.MODEL_GPT_GROQ || 'openai/gpt-oss-20b'],
+    ['cerebras', env.MODEL_GPT_CEREBRAS || 'gpt-oss-120b'],
+    ['github', env.MODEL_GPT_GITHUB || 'openai/gpt-4.1-mini'],
     ['workers-ai', env.MODEL_GPT_CF || '@cf/openai/gpt-oss-20b']
   ],
   deepseek: [
     ['deepseek', env.MODEL_DEEPSEEK || 'deepseek-chat'],
     ['openrouter', env.MODEL_DEEPSEEK_OPENROUTER || 'deepseek/deepseek-chat-v3.1:free'],
+    ['github', env.MODEL_DEEPSEEK_GITHUB || 'deepseek/DeepSeek-V3-0324'],
     ['workers-ai', env.MODEL_DEEPSEEK_CF || '@cf/deepseek-ai/deepseek-r1-distill-qwen-32b']
   ],
-  // There is no free Claude API. This needs an OpenRouter key with credits.
-  claude: [['openrouter', env.MODEL_CLAUDE || 'anthropic/claude-haiku-4.5'], ['workers-ai', env.MODEL_CLAUDE_FALLBACK_CF || '@cf/meta/llama-3.3-70b-instruct-fp8-fast']],
+  // There is no free Claude API. Real Claude needs an OpenRouter key with credits (or ANTHROPIC_API_KEY); otherwise a free substitute answers.
+  claude: [['anthropic', env.MODEL_CLAUDE_ANTHROPIC || 'claude-haiku-4-5'], ['openrouter', env.MODEL_CLAUDE || 'anthropic/claude-haiku-4.5']],
   gemma: [['openrouter', env.MODEL_GEMMA || 'google/gemma-3-27b-it:free'], ['groq', env.MODEL_GEMMA_GROQ || 'gemma2-9b-it'], ['workers-ai', env.MODEL_GEMMA_CF || '@cf/google/gemma-3-12b-it']],
   kimi: [['openrouter', env.MODEL_KIMI || 'moonshotai/kimi-k2:free'], ['groq', env.MODEL_KIMI_GROQ || 'moonshotai/kimi-k2-instruct']],
-  glm: [['openrouter', env.MODEL_GLM || 'z-ai/glm-4.5-air:free']],
+  glm: [['openrouter', env.MODEL_GLM || 'z-ai/glm-4.5-air:free'], ['cerebras', env.MODEL_GLM_CEREBRAS || 'zai-glm-4.6']],
   minimax: [['openrouter', env.MODEL_MINIMAX || 'minimax/minimax-m2:free']],
-  coder: [['openrouter', env.MODEL_CODER || 'qwen/qwen3-coder:free'], ['groq', env.MODEL_CODER_GROQ || 'openai/gpt-oss-120b'], ['workers-ai', env.MODEL_CODER_CF || '@cf/qwen/qwen2.5-coder-32b-instruct']],
+  coder: [['openrouter', env.MODEL_CODER || 'qwen/qwen3-coder:free'], ['groq', env.MODEL_CODER_GROQ || 'openai/gpt-oss-120b'], ['cerebras', env.MODEL_CODER_CEREBRAS || 'qwen-3-coder-480b'], ['workers-ai', env.MODEL_CODER_CF || '@cf/qwen/qwen2.5-coder-32b-instruct']],
   llama: [
-    ['workers-ai', env.MODEL_LLAMA_CF || '@cf/meta/llama-3.1-8b-instruct'],
-    ['groq', env.MODEL_LLAMA_GROQ || 'llama-3.1-8b-instant']
+    ['groq', env.MODEL_LLAMA_GROQ || 'llama-3.1-8b-instant'],
+    ['cerebras', env.MODEL_LLAMA_CEREBRAS || 'llama3.1-8b'],
+    ['workers-ai', env.MODEL_LLAMA_CF || '@cf/meta/llama-3.1-8b-instruct']
   ]
-});
-// Every model ends with a keyless public fallback (Pollinations), so AI works with ZERO keys. Real keys are tried first.
+}, env);
+
+// Substitutes: used only when NONE of a model's own providers answered, so every endpoint still gives an answer (the reply says substituted:true).
+const generic = (env) => [
+  ['groq', env.MODEL_SUB_GROQ || 'llama-3.3-70b-versatile'], ['cerebras', env.MODEL_SUB_CEREBRAS || 'llama-3.3-70b'],
+  ['mistral', env.MODEL_SUB_MISTRAL || 'mistral-small-latest'], ['github', env.MODEL_SUB_GITHUB || 'openai/gpt-4.1-mini'],
+  ['openrouter', env.MODEL_SUB_OPENROUTER || 'meta-llama/llama-3.3-70b-instruct:free'], ['workers-ai', env.MODEL_SUB_CF || '@cf/meta/llama-3.3-70b-instruct-fp8-fast']
+];
 const PMODEL = { gemini: 'gemini', deepseek: 'deepseek', claude: 'claude', llama: 'llama', coder: 'qwen-coder' }; // best matching Pollinations model per name (others use 'openai')
-const withFree = (c) => Object.fromEntries(Object.entries(c).map(([k, v]) => [k, [...v, ['pollinations', PMODEL[k] || 'openai']]]));
+// Order: own providers -> substitutes -> Pollinations (last: anonymous use is limited to 1 reply / 45 s per IP, a free key from enter.pollinations.ai removes that).
+function withFree(c, env) {
+  const g = generic(env);
+  return Object.fromEntries(Object.entries(c).map(([k, v]) => {
+    const own = new Set(v.map((x) => x[0] + '|' + x[1]));
+    return [k, [...v, ...g.filter((x) => !own.has(x[0] + '|' + x[1])).map((x) => [...x, 'sub']), ['pollinations', PMODEL[k] || 'openai', 'sub']]];
+  }));
+}
 export const MODEL_NAMES = ['gemini', 'gpt', 'deepseek', 'claude', 'llama', 'gemma', 'kimi', 'glm', 'minimax', 'coder'];
 
-const configured = (prov, env) => ({
-  gemini: !!env.GEMINI_API_KEY, openrouter: !!env.OPENROUTER_API_KEY, groq: !!env.GROQ_API_KEY,
-  deepseek: !!env.DEEPSEEK_API_KEY, pollinations: true, 'workers-ai': !!(env.CF_ACCOUNT_ID && env.CF_API_TOKEN)
-}[prov]);
+// OpenAI-compatible providers: [chat url, env var that holds the key]
+const OAI = {
+  openrouter: ['https://openrouter.ai/api/v1/chat/completions', 'OPENROUTER_API_KEY'],
+  groq: ['https://api.groq.com/openai/v1/chat/completions', 'GROQ_API_KEY'],
+  deepseek: ['https://api.deepseek.com/chat/completions', 'DEEPSEEK_API_KEY'],
+  cerebras: ['https://api.cerebras.ai/v1/chat/completions', 'CEREBRAS_API_KEY'],
+  mistral: ['https://api.mistral.ai/v1/chat/completions', 'MISTRAL_API_KEY'],
+  github: ['https://models.github.ai/inference/chat/completions', 'GITHUB_TOKEN']
+};
+const configured = (prov, env) => (OAI[prov] ? !!env[OAI[prov][1]] : ({
+  gemini: !!env.GEMINI_API_KEY, anthropic: !!env.ANTHROPIC_API_KEY, pollinations: true, 'workers-ai': !!(env.CF_ACCOUNT_ID && env.CF_API_TOKEN)
+}[prov]));
 
-async function openaiStyle(url, key, model, messages, max, extraHeaders = {}) {
+async function openaiStyle(url, key, model, messages, max, ms, extraHeaders = {}) {
   const r = await fetchT(url, {
     method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, ...extraHeaders },
     body: JSON.stringify({ model, messages, max_tokens: max, temperature: 0.7 })
-  }, 28000);
+  }, ms);
   const d = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(d.error?.message || `HTTP ${r.status}`);
+  if (!r.ok) throw new Error(d.error?.message || (typeof d.error === 'string' ? d.error : '') || d.message || `HTTP ${r.status}`);
   const t = d.choices?.[0]?.message?.content;
   if (!t) throw new Error('empty answer');
   return t;
 }
 
-async function run(prov, model, messages, max, env) {
+// Pollinations: with POLLINATIONS_API_KEY (free at https://enter.pollinations.ai) there is no 45 s limit.
+// Anonymous: the server tells us how long to wait; we remember it and skip instantly (no wasted 25 s calls, no second hit on the limit).
+let pollBlockedUntil = 0;
+async function pollinations(model, messages, max, env, ms) {
+  const key = env.POLLINATIONS_API_KEY || env.POLLINATIONS_KEY;
+  if (key) return openaiStyle('https://gen.pollinations.ai/v1/chat/completions', key, model, messages, max, ms);
+  const wait = pollBlockedUntil - Date.now();
+  if (wait > 0) throw new Error(`free Pollinations limit (1 reply / 45 s per IP): retry in ${Math.ceil(wait / 1000)}s. Add a free POLLINATIONS_API_KEY.`);
+  const errs = [];
+  for (const m of [...new Set([model, 'openai'])]) {
+    try {
+      const r = await fetchT('https://text.pollinations.ai/openai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m, messages, max_tokens: max }) }, ms);
+      const d = await r.json().catch(() => ({}));
+      const t = r.ok && d.choices?.[0]?.message?.content;
+      if (t) return t;
+      const msg = String(d.error?.message || d.error || 'HTTP ' + r.status);
+      errs.push(`${m}: ${msg}`);
+      if (r.status === 429 || /limit reached/i.test(msg)) { // do not hit the limit a second time
+        const s = Number(msg.match(/after\s+(\d+)\s*s/i)?.[1]) || 45;
+        pollBlockedUntil = Date.now() + Math.min(s, 60) * 1000;
+        break;
+      }
+    } catch (e) { errs.push(`${m}: ${e.message}`); }
+  }
+  throw new Error(errs.join(' / ') || 'empty answer');
+}
+
+async function run(prov, model, messages, max, env, ms) {
+  if (OAI[prov]) return openaiStyle(OAI[prov][0], env[OAI[prov][1]], model, messages, max, ms, prov === 'openrouter' ? { 'X-Title': 'PASIYA API' } : {});
   if (prov === 'gemini') {
     const sys = messages.find((m) => m.role === 'system')?.content;
     const user = messages.filter((m) => m.role !== 'system').map((m) => m.content).join('\n');
     const r = await fetchT(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: user }] }], ...(sys ? { systemInstruction: { parts: [{ text: sys }] } } : {}), generationConfig: { maxOutputTokens: max } })
-    }, 28000);
+    }, ms);
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(d.error?.message || `HTTP ${r.status}`);
     const t = d.candidates?.[0]?.content?.parts?.map((x) => x.text || '').join('');
     if (!t) throw new Error('empty answer');
     return t;
   }
-  if (prov === 'openrouter') return openaiStyle('https://openrouter.ai/api/v1/chat/completions', env.OPENROUTER_API_KEY, model, messages, max, { 'X-Title': 'PASIYA API' });
-  if (prov === 'groq') return openaiStyle('https://api.groq.com/openai/v1/chat/completions', env.GROQ_API_KEY, model, messages, max);
-  if (prov === 'deepseek') return openaiStyle('https://api.deepseek.com/chat/completions', env.DEEPSEEK_API_KEY, model, messages, max);
-  if (prov === 'pollinations') { // https://text.pollinations.ai : free, anonymous. Tries the matching model, then the general one, POST first then plain GET.
-    const errs = [];
-    for (const m of [...new Set([model, 'openai'])]) {
-      try {
-        const r = await fetchT('https://text.pollinations.ai/openai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m, messages, max_tokens: max }) }, 25000);
-        const d = await r.json().catch(() => ({}));
-        const t = r.ok && d.choices?.[0]?.message?.content;
-        if (t) return t;
-        errs.push(`${m}: ${d.error?.message || d.error || 'HTTP ' + r.status}`);
-      } catch (e) { errs.push(`${m}: ${e.message}`); }
-    }
-    try { // last resort: the simple GET endpoint
-      const flat = messages.map((x) => (x.role === 'system' ? 'Instruction: ' : '') + x.content).join('\n\n').slice(0, 3500);
-      const u = new URL('https://text.pollinations.ai/' + encodeURIComponent(flat)); u.searchParams.set('model', 'openai');
-      const r = await fetchT(u, {}, 25000); const t = r.ok && (await r.text()).trim();
-      if (t && !t.startsWith('{"error"')) return t;
-    } catch (e) { errs.push('get: ' + e.message); }
-    throw new Error(errs.join(' / ') || 'empty answer');
+  if (prov === 'anthropic') { // official Claude API (paid): ANTHROPIC_API_KEY
+    const sys = messages.find((m) => m.role === 'system')?.content;
+    const r = await fetchT('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model, max_tokens: max, ...(sys ? { system: sys } : {}), messages: messages.filter((m) => m.role !== 'system') })
+    }, ms);
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.error?.message || `HTTP ${r.status}`);
+    const t = (d.content || []).map((x) => x.text || '').join('');
+    if (!t) throw new Error('empty answer');
+    return t;
   }
+  if (prov === 'pollinations') return pollinations(model, messages, max, env, ms);
   if (prov === 'workers-ai') { // Cloudflare Workers AI over REST (free tier): needs CF_ACCOUNT_ID + CF_API_TOKEN
     const r = await fetchT(`https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/ai/run/${model}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${env.CF_API_TOKEN}` }, body: JSON.stringify({ messages, max_tokens: max })
-    }, 28000);
+    }, ms);
     const d = await r.json().catch(() => ({}));
     if (!r.ok || d.success === false) throw new Error(d.errors?.[0]?.message || `HTTP ${r.status}`);
     const x = d.result, t = x?.response ?? x?.choices?.[0]?.message?.content ?? x?.output_text;
@@ -107,24 +151,24 @@ function makeHandler(forced, persona) {
     if (prompt.length > 4000) throw new HttpError(400, 'prompt is too long (max 4000 characters).');
     const chain = chains(env)[name];
     if (!chain) throw new HttpError(400, `Unknown model "${name}". Use: ${MODEL_NAMES.join(', ')}`);
+    // Pollinations is always "configured", so only count REAL keys when deciding whether the server has AI set up.
     const usable = chain.filter(([prov]) => configured(prov, env));
-    if (!usable.length) {
-      const need = 'CF_ACCOUNT_ID + CF_API_TOKEN (free Cloudflare Workers AI) or a provider key (GEMINI_API_KEY, OPENROUTER_API_KEY, GROQ_API_KEY, DEEPSEEK_API_KEY)';
-      throw new HttpError(503, `The "${name}" model is not enabled on this server. The owner must add ${need}.`);
-    }
     const max = Math.min(Number(p.max_tokens) || 700, 1500);
     const messages = [
       ...((p.system || persona) ? [{ role: 'system', content: String(p.system || persona).slice(0, 800) }] : []),
       { role: 'user', content: prompt }
     ];
-    const tried = [];
-    for (const [prov, model] of usable) {
+    const tried = [], deadline = Date.now() + 20000; // total budget stays under the Vercel limit and the 24 s health check
+    for (const [prov, model, kind] of usable) {
+      const left = deadline - Date.now();
+      if (left < 2500) { tried.push('stopped: time budget used'); break; }
       try {
-        const answer = await run(prov, model, messages, max, env);
-        return { model: name, provider: prov, modelId: model, answer: answer.trim() };
-      } catch (e) { tried.push(`${prov}: ${e.message}`); }
+        const answer = await run(prov, model, messages, max, env, Math.min(9000, left));
+        return { model: name, provider: prov, modelId: model, ...(kind === 'sub' ? { substituted: true } : {}), answer: answer.trim() };
+      } catch (e) { tried.push(`${prov}: ${String(e.message).slice(0, 140)}`); }
     }
-    throw new HttpError(502, 'All providers failed. ' + tried.join(' | '));
+    const hasKey = usable.some(([prov]) => prov !== 'pollinations');
+    throw new HttpError(hasKey ? 502 : 503, (hasKey ? 'All providers failed. ' : 'No AI key is set on this server, and the free anonymous service is limited. Owner: add free keys (GROQ_API_KEY, GEMINI_API_KEY, CEREBRAS_API_KEY, OPENROUTER_API_KEY, POLLINATIONS_API_KEY...). ') + tried.join(' | '));
   };
 }
 
