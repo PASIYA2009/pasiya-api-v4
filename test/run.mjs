@@ -47,7 +47,7 @@ globalThis.fetch = async (input, init = {}) => {
     if (m === 'PATCH') { db.set(decodeURIComponent(path.slice(1)), body.fields); return j({}); }
     if (m === 'POST') { const id = 'auto' + db.size; db.set(path.slice(1) + '/' + id, body.fields); return j({ name: 'x/' + id }); }
   }
-  if (url.includes('scraper.example')) { SCRAPER_CALLS.push({ url, key: init.headers?.['x-api-key'], body: init.body }); return j({ success: true, platform: 'youtube', download: { filename: 'v.mp4', url: 'https://scraper.example/dl/tok', type: 'video', expiresInSec: 600 } }); }
+  if (url.includes('scraper.example')) { SCRAPER_CALLS.push({ url, key: init.headers?.['x-api-key'], body: init.body }); if (url.includes('/v1/movie/')) return j({ success: true, result: { source: 'cinesubz', items: [{ id: 'movie-1', title: 'Avatar' }] } }); return j({ success: true, platform: 'youtube', download: { filename: 'v.mp4', url: 'https://scraper.example/dl/tok', type: 'video', expiresInSec: 600 } }); }
   if (url.includes('drive.usercontent.google.com')) {
     if (url.includes('id=PRIVATEFILE')) return new Response('<html>Sign in accounts.google.com</html>', { headers: { 'content-type': 'text/html' } });
     return new Response('data', { headers: { 'content-type': 'application/zip', 'content-disposition': 'attachment; filename="my file.zip"', 'content-length': '1234' } });
@@ -184,10 +184,10 @@ r = await call('/api/usage', auth, user2); ok('usage logged', r.b.items.length =
 for (let i = 0; i < 12; i++) await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`, {}, user2);
 r = await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`, {}, user2); ok('out of coins -> 402', r.s === 402, r);
 
-r = await call('/api/status', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-vercel-id': 'sin1::abc' } }); ok('status shape', r.b.status === 'Online' && r.b.database.ok && r.b.requests24h > 5 && r.b.endpoints === 110 && r.b.categories === 10, r.b);
-r = await call('/api/catalog'); ok('catalog lists the public APIs', r.b.apis.length === 110, r.b.apis.length);
-r = await call('/api/catalog', {}, { ...env, SCRAPER_URL: 'https://s' }); ok('catalog same w/ SCRAPER_URL', r.b.apis.length === 110, r.b.apis.length);
-r = await call('/api/catalog', {}, { ...env, APIFY_TOKEN: 'x', TAVILY_API_KEY: 'x' }); ok('social (Apify) + Tavily APIs appear only when their key is set', r.b.apis.length === 110 + 16 + 1 && r.b.apis.some((a) => a.path === '/api/social/tiktok/profile'), r.b.apis.length);
+r = await call('/api/status', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-vercel-id': 'sin1::abc' } }); ok('status shape', r.b.status === 'Online' && r.b.database.ok && r.b.requests24h > 5 && r.b.endpoints === 119 && r.b.categories === 10, r.b);
+r = await call('/api/catalog'); ok('catalog lists the public APIs', r.b.apis.length === 119, r.b.apis.length);
+r = await call('/api/catalog', {}, { ...env, SCRAPER_URL: 'https://s' }); ok('catalog same w/ SCRAPER_URL', r.b.apis.length === 119, r.b.apis.length);
+r = await call('/api/catalog', {}, { ...env, APIFY_TOKEN: 'x', TAVILY_API_KEY: 'x' }); ok('social (Apify) + Tavily APIs appear only when their key is set', r.b.apis.length === 119 + 16 + 1 && r.b.apis.some((a) => a.path === '/api/social/tiktok/profile'), r.b.apis.length);
 r = await call('/api/daily-claim', { method: 'POST', ...auth }, user2); ok('daily claim', r.s === 200, r);
 r = await call('/api/daily-claim', { method: 'POST', ...auth }, user2); ok('daily claim twice 409', r.s === 409, r);
 r = await call('/api/spin', { method: 'POST', ...auth }, user2); ok('spin awards coins', r.s === 200 && [10,25,50,100,250].includes(r.b.reward) && r.b.index >= 0 && r.b.index < 5, r);
@@ -201,6 +201,9 @@ r = await call(`/api/scraper/youtube/download?apikey=${KEY}&url=${encodeURICompo
 ok('download forwarded to the Node service', r.s === 200 && r.b.result.download.url === 'https://scraper.example/dl/tok', r);
 ok('forward used the shared secret + sent the options', SCRAPER_CALLS.at(-1)?.key === 'sh-secret' && JSON.parse(SCRAPER_CALLS.at(-1).body).rightsConfirmed === 'true' && JSON.parse(SCRAPER_CALLS.at(-1).body).type === 'audio', SCRAPER_CALLS.at(-1));
 r = await call('/api/me', auth, user3); ok('download costs 2 coins', r.b.coins === cBefore - 2, { cBefore, now: r.b.coins });
+r = await call(`/api/movie/cinesubz/search?apikey=${KEY}&q=Avatar&page=1`, {}, user3);
+ok('Cinesubz movie search uses configured scraper and shared secret', r.s === 200 && SCRAPER_CALLS.at(-1)?.url.endsWith('/v1/movie/cinesubz/search') && SCRAPER_CALLS.at(-1)?.key === 'sh-secret' && JSON.parse(SCRAPER_CALLS.at(-1).body).q === 'Avatar', r);
+
 r = await call(`/api/scraper/tiktok/download?apikey=${KEY}&url=x`, {}, fast); ok('download w/o rightsConfirmed -> 400', r.s === 400, r);
 r = await call(`/api/scraper/gdrive/resolve?apikey=${KEY}&url=${encodeURIComponent('https://drive.google.com/file/d/1AbCdEfGhIjKlMnOp/view?usp=sharing')}`, {}, fast);
 ok('gdrive file resolve (built-in)', r.s === 200 && r.b.result.result.name === 'my file.zip' && r.b.result.result.size === 1234 && r.b.result.result.downloadUrl.includes('id=1AbCdEfGhIjKlMnOp'), r);
@@ -226,7 +229,9 @@ r = await D('youtube', 'https://youtu.be/dQw4w9WgXcQ', '&type=audio'); ok('keyle
 r = await D('youtube', 'https://www.youtube.com/watch?v=LOGINNEEDED'); ok('youtube bot check -> clear 503', r.s === 503 && /SCRAPER_URL/.test(r.b.error), r);
 r = await D('youtube', 'https://evil.example/watch?v=dQw4w9WgXcQ'); ok('download wrong host -> 400', r.s === 400, r);
 for (const dead of ['cinesubz/search', 'cinesubz/details', 'cinesubz/links', 'sinhalasub/search', 'sinhalasub/details', 'sinhalasub/direct']) { r = await call(`/api/scraper/${dead}?apikey=${KEY}&query=x`, {}, user3); ok(`removed: ${dead} -> 404`, r.s === 404, r); }
-r = await call('/api/catalog'); ok('catalog has no movie-piracy entries', !JSON.stringify(r.b).match(/cinesubz|sinhalasub/i), 'found');
+r = await call('/api/catalog');
+const movieSourcePaths = ['cinesubz','sinhalasub','sublk'].flatMap((site) => ['search','details','download'].map((action) => `/api/movie/${site}/${action}`));
+ok('catalog includes all nine movie-source APIs', movieSourcePaths.every((path) => r.b.apis.some((a) => a.path === path)) && movieSourcePaths.length === 9, r.b.apis.filter((a) => a.category === 'Movies').map((a) => a.path));
 r = await call('/api/admin/overview', auth); ok('admin overview', r.s === 200 || r.s === 503, r); // count aggregation not mocked
 r = await call('/api/admin/overview', auth, user2); ok('non-admin blocked from admin 403', r.s === 403, r);
 
