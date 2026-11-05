@@ -14,7 +14,6 @@ import news from '../scrapers/news.js';
 import weather from '../scrapers/weather.js';
 import tv from '../scrapers/tv.js';
 import movies from '../scrapers/movies.js';
-import movieSources from '../scrapers/movie_sources.js';
 import ai from '../scrapers/ai.js';
 import download from '../scrapers/download.js';
 import newsfeeds from '../scrapers/newsfeeds.js';
@@ -40,7 +39,7 @@ export const forward = (upstreamPath) => async (p, env) => {
 };
 
 // Order here = order of the categories in the dashboard.
-const ALL = [ai, aiExtra, news, newsfeeds, search, weather, utility, extras, tv, movies, movieSources, youtube, facebook, tiktok, instagram, download, mediafire, gdrive, catbox, moreDl, hd, newTools, apify].flat();
+const ALL = [ai, aiExtra, news, newsfeeds, search, weather, utility, extras, tv, movies, youtube, facebook, tiktok, instagram, download, mediafire, gdrive, catbox, moreDl, hd, newTools, apify].flat();
 
 export const ENDPOINTS = new Map(ALL.map((e) => {
   if (!e.remote) return [e.path, e];

@@ -5,6 +5,6 @@
   "installCommand": null,
   "outputDirectory": "public",
   "cleanUrls": true,
-  "rewrites": [{ "source": "/api/(.*)", "destination": "/api/index" }],
+  "rewrites": [{ "source": "/api", "destination": "/api/index" }, { "source": "/api/(.*)", "destination": "/api/index" }],
   "functions": { "api/index.js": { "maxDuration": 30 } }
 }

@@ -19,7 +19,7 @@ scrapers/                      ← one file per site / service
 1. Put this folder at the ROOT of a GitHub repo (package.json + api/ + public/ visible on the repo's first page) → Vercel → **Add New Project** → import it. Leave everything default (vercel.json already sets Framework = none; Node 22).
 2. **Settings → Environment Variables**: copy everything from `.env.example`. Required: `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY`, `FIREBASE_SERVICE_ACCOUNT_JSON`, `ADMIN_EMAIL`. Then **Redeploy**.
 3. Firebase Console → **Authentication → Settings → Authorized domains** → add `your-project.vercel.app`.
-4. Check `https://your-project.vercel.app/api/health` → `{"ok":true,...}`. Then open the site and login with the admin email.
+4. Check `https://your-project.vercel.app/api` for the service information JSON, then `/api/health` for the health check (`{"ok":true,...}`). Open the site and log in with the admin email.
 
 Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 
