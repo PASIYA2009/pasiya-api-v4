@@ -1,6 +1,7 @@
 // Auth, coin charging, rate limiting and usage stats for every public API call.
 import { HttpError, json, sha256, stamp, CREATOR, CORS } from './util.js';
 import * as fs from './db.js';
+import { getFlags } from './flags.js';
 
 // ---- identity (dashboard login, Firebase ID token) ----
 const idCache = new Map();
@@ -135,6 +136,7 @@ export async function serve(req, env, def) {
   try {
     who = await caller(req, env, url, def);
     rateLimit(who.u.uid, env, who.anonymous);
+    if (!who.isAdmin && (await getFlags(env)).disabledApis.includes(def.path)) throw new HttpError(503, 'This API is switched off by the admin right now.');
     if (def.cost > 0 && !who.isAdmin && !who.anonymous && (who.p.coins || 0) < def.cost) throw new HttpError(402, 'Not enough coins. Claim your daily coins, spin the wheel or ask the admin.');
     const p = await params(req, url);
     const result = await def.run(p, env, req);

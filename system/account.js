@@ -2,6 +2,8 @@
 import { HttpError, stamp, sha256, randomHex } from './util.js';
 import * as fs from './db.js';
 import { session, forgetKeys, isAdminEmail } from './gateway.js';
+import { getFlags, resetFlags } from './flags.js';
+import { ENDPOINTS, listCatalog } from './registry.js';
 
 // ---- rewards: values are editable by the admin (Firestore settings/rewards) -------------------
 // Spin wheel: [share of the max reward, weight]. The wheel in the browser only animates what the server decided.
@@ -23,8 +25,8 @@ const resolveBucket = new Map();
 export async function account(req, env, p, m) {
   if (p === '/api/me' && m === 'GET') {
     const c = await session(req, env);
-    const r = await rewardSettings(env);
-    return { ...c.p, emailVerified: c.u.verified ?? c.p.emailVerified, role: c.isAdmin ? 'admin' : 'user', unlimited: c.isAdmin, adminPending: !c.isAdmin && isAdminEmail(c.u.email, env, true), today: today(env), dailyCoins: r.dailyCoins, spinRewards: r.spinRewards };
+    const r = await rewardSettings(env), fl = await getFlags(env);
+    return { ...c.p, rewardsOn: { daily: fl.dailyEnabled && !c.isAdmin, spin: fl.spinEnabled && !c.isAdmin }, emailVerified: c.u.verified ?? c.p.emailVerified, role: c.isAdmin ? 'admin' : 'user', unlimited: c.isAdmin, adminPending: !c.isAdmin && isAdminEmail(c.u.email, env, true), today: today(env), dailyCoins: r.dailyCoins, spinRewards: r.spinRewards };
   }
   // ---- username (register page) + username -> email lookup (login page) ----
   if (p === '/api/auth/username' && m === 'POST') {
@@ -82,6 +84,7 @@ export async function account(req, env, p, m) {
   }
   if (p === '/api/daily-claim' && m === 'POST') {
     const c = await session(req, env), day = today(env), r = await rewardSettings(env), n = r.dailyCoins;
+    if (c.isAdmin || !(await getFlags(env)).dailyEnabled) throw new HttpError(403, 'Daily coins are not available right now.');
     if (c.p.lastDailyClaim === day) throw new HttpError(409, 'Daily coins already claimed. Come back tomorrow.');
     // createId fails (409) if this user already claimed today, even for two simultaneous clicks.
     await fs.commit(env, [{ createId: ['claims', `${c.u.uid}_daily_${day}`, { uid: c.u.uid, day, type: 'daily', amount: n }] }, { merge: ['users', c.u.uid, { lastDailyClaim: day }] }, { inc: { doc: ['users', c.u.uid], by: { coins: n } } }])
@@ -91,6 +94,7 @@ export async function account(req, env, p, m) {
   }
   if (p === '/api/spin' && m === 'POST') {
     const c = await session(req, env), day = today(env), r = await rewardSettings(env);
+    if (c.isAdmin || !(await getFlags(env)).spinEnabled) throw new HttpError(403, 'The lucky spin is not available right now.');
     if (c.p.lastSpinDay === day) throw new HttpError(409, 'You already spun today. Come back tomorrow.');
     const total = SPIN_SHAPE.reduce((a, x) => a + x[1], 0);
     let roll = (crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32) * total, index = 0;
@@ -122,6 +126,42 @@ export async function account(req, env, p, m) {
       if (!posInt(b.dailyCoins, 1, 100000) || !posInt(b.spinMax, 5, 1000000)) throw new HttpError(400, 'Daily coins must be 1-100000 and the biggest spin prize 5-1000000 (whole numbers).');
       await fs.commit(env, [{ merge: ['settings', 'rewards', { dailyCoins: b.dailyCoins, spinMax: b.spinMax, updatedAt: stamp(), updatedBy: c.u.email }] }]);
       return { message: 'Reward settings saved.', ...(await rewardSettings(env)) };
+    }
+    if (p === '/api/admin/features' && m === 'GET') {
+      const fl = await getFlags(env);
+      return { dailyEnabled: fl.dailyEnabled, spinEnabled: fl.spinEnabled, apis: listCatalog(env, fl, true) };
+    }
+    if (p === '/api/admin/features' && m === 'POST') {
+      const b = await body(req), upd = {};
+      for (const k of ['dailyEnabled', 'spinEnabled']) if (k in b) { if (typeof b[k] !== 'boolean') throw new HttpError(400, `${k} must be true or false.`); upd[k] = b[k]; }
+      if ('disabledApis' in b) {
+        if (!Array.isArray(b.disabledApis)) throw new HttpError(400, 'disabledApis must be a list of API paths.');
+        upd.disabledApis = [...new Set(b.disabledApis.map(String))].filter((x) => ENDPOINTS.has(x));
+      }
+      if (!Object.keys(upd).length) throw new HttpError(400, 'Nothing to save.');
+      await fs.commit(env, [{ merge: ['settings', 'features', { ...upd, updatedAt: stamp(), updatedBy: c.u.email }] }]);
+      resetFlags();
+      const fl = await getFlags(env);
+      return { message: 'Saved.', dailyEnabled: fl.dailyEnabled, spinEnabled: fl.spinEnabled, disabledApis: fl.disabledApis };
+    }
+    // Real test of the live APIs from THIS server (the only place that shows what works on Vercel). Called in small batches by the admin panel.
+    if (p === '/api/admin/healthcheck' && m === 'POST') {
+      const b = await body(req);
+      const defs = (Array.isArray(b.paths) ? b.paths : []).slice(0, 6).map((x) => ENDPOINTS.get(String(x))).filter(Boolean);
+      const results = await Promise.all(defs.map(async (d) => {
+        if (d.noProbe) return { path: d.path, state: 'skip', note: 'Not tested automatically (it uploads or changes something).' };
+        if (!(d.needsEnv ? d.needsEnv.every((k) => env[k]) : true)) return { path: d.path, state: 'skip', note: 'Not configured on this server.' };
+        const t0 = Date.now(), params = Object.fromEntries((d.params || []).filter((x) => x.example !== '').map((x) => [x.name, x.example]));
+        try {
+          await Promise.race([d.run(params, env, req), new Promise((_, rej) => setTimeout(() => rej(new HttpError(504, 'No answer in 14 seconds.')), 14000))]);
+          return { path: d.path, state: 'ok', ms: Date.now() - t0 };
+        } catch (e) {
+          const st = e instanceof HttpError ? e.status : 500;
+          // 4xx = the example input was refused (fake link / id): inconclusive. 5xx / timeout / crash = the API itself is not working.
+          return { path: d.path, state: st >= 400 && st < 500 && st !== 429 ? 'warn' : 'fail', status: st, ms: Date.now() - t0, note: (e instanceof HttpError ? e.message : 'Crashed: ' + (e?.message || e)).slice(0, 160) };
+        }
+      }));
+      return { results };
     }
     if (p === '/api/admin/coins' && m === 'POST') {
       const b = await body(req);

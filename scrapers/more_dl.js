@@ -15,7 +15,7 @@ async function ytThumb(p) {
 }
 
 // ---- X / Twitter: public post media through the open fxtwitter API ----
-async function twitter(p) {
+export async function twitter(p) {
   guard(p);
   const url = new URL(safeUrl(p.url, ['twitter.com', 'x.com', 'mobile.twitter.com']));
   const m = url.pathname.match(/^\/([\w]{1,15})\/status\/(\d{5,25})/);
@@ -84,7 +84,6 @@ export default [
   { path: '/api/instagram/dl', category: 'Social', name: 'Instagram DL', cost: 2, isNew: true, desc: 'Direct link for a public Instagram reel / video', params: L('https://www.instagram.com/reel/abc/'), run: social('instagram', 'Instagram', ['instagram.com']) },
   { path: '/api/pinterest/dl', category: 'Social', name: 'Pinterest DL', cost: 2, isNew: true, desc: 'Pinterest pin image (original size) or video link', params: L('https://www.pinterest.com/pin/123456789/'), run: pinterest },
   { path: '/api/twitter', category: 'Social', name: 'Twitter Video', cost: 2, isNew: true, desc: 'Download videos and photos from a public X / Twitter post', params: L('https://x.com/user/status/123456789'), run: twitter },
-  { path: '/api/twitter_v2', category: 'Social', name: 'Twitter Video v2', cost: 2, isNew: true, desc: 'Same as /api/twitter (alias for older apps)', params: L('https://x.com/user/status/123456789'), run: twitter },
   { path: '/api/pixeldrain', category: 'Files', name: 'Pixeldrain', cost: 0, isNew: true, desc: 'File info and direct download link for a Pixeldrain file', params: [param('url', 'https://pixeldrain.com/u/abc12345', 'Pixeldrain file link or id')], run: pixeldrain },
   { path: '/api/spotify', category: 'Search', name: 'Spotify Info', cost: 0, isNew: true, desc: 'Public track / album / playlist details and cover (metadata only)', params: [param('url', 'https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT', 'Spotify link')], run: spotify }
 ];

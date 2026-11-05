@@ -21,6 +21,8 @@ import search from '../scrapers/search.js';
 import utility from '../scrapers/utility.js';
 import extras from '../scrapers/extras.js';
 import moreDl from '../scrapers/more_dl.js';
+import hd from '../scrapers/hd.js';
+import newTools from '../scrapers/new_tools.js';
 
 // Forwards to the separate Node/yt-dlp service. The shared secret never leaves the server.
 export const forward = (upstreamPath) => async (p, env) => {
@@ -35,7 +37,7 @@ export const forward = (upstreamPath) => async (p, env) => {
 };
 
 // Order here = order of the categories in the dashboard.
-const ALL = [ai, news, newsfeeds, search, weather, utility, extras, tv, movies, youtube, facebook, tiktok, instagram, download, mediafire, gdrive, catbox, moreDl].flat();
+const ALL = [ai, news, newsfeeds, search, weather, utility, extras, tv, movies, youtube, facebook, tiktok, instagram, download, mediafire, gdrive, catbox, moreDl, hd, newTools].flat();
 
 export const ENDPOINTS = new Map(ALL.map((e) => {
   if (!e.remote) return [e.path, e];
@@ -49,3 +51,12 @@ for (const l of ['facebook/search', 'tiktok/search', 'instagram/search']) {
 }
 
 export const CATALOG = ALL.filter((e) => !e.hidden).map(({ run, remote, ...c }) => ({ ...c, method: 'GET' }));
+
+// An endpoint with `needsEnv: ['KEY']` only appears once those environment variables are set.
+export const isConfigured = (c, env) => !c.needsEnv || c.needsEnv.every((k) => !!env[k]);
+// Public catalog = everything the admin has not switched off and the server is configured for. all=true is the admin view.
+export function listCatalog(env, flags, all = false) {
+  const off = new Set(flags?.disabledApis || []);
+  return CATALOG.filter((c) => all || (!off.has(c.path) && isConfigured(c, env)))
+    .map(({ needsEnv, noProbe, ...c }) => ({ ...c, ...(all ? { enabled: !off.has(c.path), configured: isConfigured({ needsEnv }, env), noProbe: !!noProbe } : {}) }));
+}

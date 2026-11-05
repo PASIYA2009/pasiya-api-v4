@@ -23,5 +23,5 @@ async function upload(p, env) {
 }
 
 export default [
-  { path: '/api/scraper/catbox/upload', remote: 'catbox/upload', category: 'Files', name: 'Catbox upload', cost: 2, desc: 'Upload a public file link to Catbox and get the permanent link', params: [param('url', 'https://example.com/picture.jpg', 'Public page / video URL')], run: upload }
+  { path: '/api/scraper/catbox/upload', remote: 'catbox/upload', category: 'Files', name: 'Catbox upload', cost: 2, noProbe: true, desc: 'Upload a public file link to Catbox and get the permanent link', params: [param('url', 'https://example.com/picture.jpg', 'Public page / video URL')], run: upload }
 ];

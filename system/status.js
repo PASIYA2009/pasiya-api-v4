@@ -2,7 +2,8 @@
 import { cached } from './util.js';
 import * as fs from './db.js';
 import { statsLast24h } from './gateway.js';
-import { CATALOG } from './registry.js';
+import { listCatalog } from './registry.js';
+import { getFlags } from './flags.js';
 
 // Short, safe reason shown under the DATABASE card so the owner can see what to fix (no secrets are ever included).
 function dbHint(e) {
@@ -27,6 +28,7 @@ export async function status(req, env) {
       db = { ok: true, name: 'Firebase Firestore', note: 'Connected' };
     } catch (e) { db = { ok: false, name: 'Firestore: ' + dbHint(e), note: 'Unreachable' }; }
   }
+  const visible = listCatalog(env, await getFlags(env));
   const started = env.PLATFORM_START ? new Date(env.PLATFORM_START).getTime() : null;
   let city = h('x-vercel-ip-city');
   try { city = city && decodeURIComponent(city); } catch { /* keep raw */ }
@@ -37,8 +39,8 @@ export async function status(req, env) {
     edge: { colo: (h('x-vercel-id') || '').split('::')[0] || null, protocol: null, network: 'Vercel' },
     database: db,
     uptimeMs: started && !isNaN(started) ? Date.now() - started : null,
-    endpoints: CATALOG.length,
-    categories: new Set(CATALOG.map((c) => c.category)).size,
+    endpoints: visible.length,
+    categories: new Set(visible.map((c) => c.category)).size,
     users,
     requests24h: stats.requests, errors24h: stats.errors, avgResponseMs: stats.avgMs, successRate: stats.successRate,
     time: new Date().toISOString()

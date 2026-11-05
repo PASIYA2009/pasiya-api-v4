@@ -40,9 +40,7 @@ export function ytId(raw) {
   if (!/^[\w-]{11}$/.test(id || '')) throw new HttpError(400, 'Could not find a video id in this YouTube link.');
   return id;
 }
-export async function youtube(p) {
-  const type = guard(p), id = ytId(p.url);
-  const d = await cached('dl:yt:' + id, 600, async () => {
+export const ytPlayer = (id) => cached('dl:yt:' + id, 600, async () => {
     const r = await fetchT('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
       method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': 'com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip', 'X-YouTube-Client-Name': '3', 'X-YouTube-Client-Version': '19.09.37' },
       body: JSON.stringify({ videoId: id, contentCheckOk: true, racyCheckOk: true, context: { client: { clientName: 'ANDROID', clientVersion: '19.09.37', androidSdkVersion: 30, hl: 'en', gl: 'US' } } })
@@ -50,6 +48,9 @@ export async function youtube(p) {
     if (!r.ok) throw new HttpError(502, 'YouTube is not answering right now.');
     return r.json();
   });
+export async function youtube(p) {
+  const type = guard(p), id = ytId(p.url);
+  const d = await ytPlayer(id);
   const st = d.playabilityStatus?.status;
   if (st === 'ERROR' || st === 'UNPLAYABLE') throw new HttpError(404, 'Video not found or not available.');
   if (st === 'LOGIN_REQUIRED') throw new HttpError(503, 'YouTube asked this server to sign in (bot check). Connect the separate downloader service (SCRAPER_URL) for YouTube.');

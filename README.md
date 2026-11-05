@@ -31,6 +31,15 @@ Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 - Downloads are best effort (sites change; YouTube may refuse Vercel's datacenter IPs). For maximum reliability host the separate yt-dlp service (`pasiya-scraper-api`) and set `SCRAPER_URL` + `SCRAPER_SHARED_SECRET`: it then answers the download endpoints instead.
 - `maxDuration` is 30s in `vercel.json` (Hobby allows up to 60).
 
+## v3.9
+- **Admin Panel > Feature switches:** turn the Daily claim and the Lucky Spin on/off for everyone (stored in Firestore `settings/features`). They are shown ONLY to signed-in normal users: guests and admins never see them (the server blocks them too).
+- **Admin Panel > API manager:** *Run health check* tests every API from the live server (Vercel) in small batches; *Switch off failed* hides the broken ones from the catalog (they answer 503). Every API also has its own on/off switch. Admins can still test switched-off APIs.
+- **Removed:** `/api/thenux-ai`, `/api/twitter_v2`.
+- **New:** `/api/video/hd` (best-quality links + every quality, with the "send as Document, not as Status" WhatsApp tip), `/api/tools/qr`, `/api/tools/ip`.
+- **Mobile:** the menu is now a hamburger button (top right) that slides a drawer in from the right. Smaller logo + name in the bar.
+- **Music:** 5 background songs with Play/Pause, Next and Previous in the menu. Browsers only allow sound after the first tap or click, so autoplay starts on the first touch. Pausing is remembered on that device.
+- Not built on purpose: sinhalasub.lk (full movies / episodes = piracy), same rule as the other pirated sites below.
+
 ## v3.4: 14 more AI endpoints (ChatGPT, DeepSeek, Gemma, Kimi, GLM, MiniMax, Coder, BlackBox, Answer Engine, Quick Answers, NoteGPT, Sinhala Assistant, Flux image, Nano Banana). Model ids can be overridden with MODEL_* env vars.
 
 ## v3.5: scrapers/more_dl.js adds YouTube MP4/MP3/Thumbnail DL, TikTok/Facebook/Instagram/Pinterest DL, Twitter (X) video, Pixeldrain, Spotify info.

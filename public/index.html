@@ -148,13 +148,41 @@ input:focus{border-color:var(--primary)}
 .pathrow{display:flex;align-items:center;gap:10px;margin-top:auto}.pathrow .method{padding:6px 9px;font-size:11px}.pathrow .code{flex:1;margin:0;background:transparent;padding:0;font-size:12px;color:var(--muted)}
 .pathrow button{width:38px;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);display:grid;place-items:center}.pathrow button:hover{border-color:var(--primary);color:var(--primary)}
 
+/* music player + switches + drawer */
+.menu-btn,.drawer-head{display:none}
+.drawer-back{position:fixed;inset:0;z-index:55;background:#02080d99;backdrop-filter:blur(2px)}
+.player{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:12px;border:1px solid var(--line);background:var(--surface);border-radius:14px}
+.pl-art{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;color:var(--primary);background:color-mix(in srgb,var(--primary) 12%,transparent);border:1px solid color-mix(in srgb,var(--primary) 25%,transparent)}
+.pl-art.on svg{animation:beat 1s ease-in-out infinite alternate}@keyframes beat{to{transform:scale(1.18)}}
+.pl-info{min-width:0;flex:1}.pl-info b{display:block;font-size:13px;color:var(--head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pl-info small{color:var(--muted);font-size:11px}
+.pl-ctl{display:flex;gap:6px;width:100%;justify-content:space-between}
+.pl-ctl button{flex:1;height:38px;border-radius:10px;border:1px solid var(--line);background:var(--surface2);display:grid;place-items:center;color:var(--text)}
+.pl-ctl button:hover{border-color:var(--primary);color:var(--primary)}.pl-ctl button.pl-main{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.pl-ctl svg{width:18px;height:18px;fill:currentColor;stroke:none}
+#ytWrap{position:fixed;left:-400px;top:0;width:200px;height:200px;overflow:hidden;opacity:.01;pointer-events:none}
+.columns.one{grid-template-columns:1fr}
+.switches{display:flex;gap:18px;flex-wrap:wrap;margin:12px 0 4px}
+.sw{display:inline-flex;align-items:center;gap:10px;cursor:pointer;font-weight:600}
+.sw input{position:absolute;opacity:0;width:1px;height:1px;min-height:0}
+.sw .track{width:42px;height:24px;border-radius:999px;background:var(--line);position:relative;transition:background .15s;flex:none}
+.sw .track:after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .15s}
+.sw input:checked+.track{background:var(--good)}.sw input:checked+.track:after{transform:translateX(18px)}
+.sw input:focus-visible+.track{outline:2px solid var(--primary);outline-offset:2px}
+.chip{font:800 10px var(--sans);letter-spacing:.06em;padding:4px 8px;border-radius:999px;border:1px solid}
+.chip.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,var(--line))}.chip.fail{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 45%,var(--line))}.chip.warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}.chip.skip{color:var(--muted);border-color:var(--line)}
+#apiRows{max-height:460px;overflow:auto}#apiRows .rowi{align-items:flex-start}#apiRows .rowi>span:first-child{min-width:0}
 @media(max-width:1000px){.api-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:760px){
   .layout{grid-template-columns:1fr}
-  aside{position:sticky;top:68px;z-index:15;height:auto;display:flex;overflow-x:auto;gap:4px;border-right:0;border-bottom:1px solid var(--line);padding:8px;background:var(--bg)}
-  .nav-label,.me-chip{display:none}.nav{white-space:nowrap;width:auto;padding:10px 12px}
+  .menu-btn{display:grid}
+  .topbar{padding:0 12px;gap:6px}.top-actions{gap:8px}.logo{width:32px;height:32px}.brand{gap:8px}.brand b{font-size:16px}.brand small{font-size:9.5px;margin-top:2px}
+  .icon-btn,.avatar{width:40px;height:40px}.top-actions .btn.primary{min-height:40px;padding:0 13px}
+  aside{position:fixed;top:0;right:0;bottom:0;z-index:60;width:min(310px,86vw);height:100vh;height:100dvh;transform:translateX(105%);visibility:hidden;transition:transform .25s ease,visibility .25s;border-right:0;border-left:1px solid var(--line);padding:calc(14px + env(safe-area-inset-top)) 14px calc(22px + env(safe-area-inset-bottom));background:var(--surface);box-shadow:-20px 0 60px #0008}
+  aside.open{transform:none;visibility:visible}
+  .drawer-head{display:flex;align-items:center;justify-content:space-between;margin:0 0 14px;font-weight:800;letter-spacing:.16em;font-size:11px;color:var(--muted)}
+  .nav{padding:13px 12px}
   .main{padding:20px 14px 6px}.columns{grid-template-columns:1fr}.welcome .pill{display:none}
-  .stats{grid-template-columns:1fr 1fr;gap:10px}html{scroll-padding-top:132px}
+  .stats{grid-template-columns:1fr 1fr;gap:10px}html{scroll-padding-top:84px}
   .top-actions .ghost{display:none}.wheel{width:125px;height:125px;--r:41px}.wheel:after{inset:36px}
 }
 @media(max-width:560px){.api-grid{grid-template-columns:1fr}.wheel-wrap{flex-direction:column;align-items:flex-start}}
@@ -170,20 +198,33 @@ input:focus{border-color:var(--primary)}
     <a class="btn ghost" id="regTop" href="/register">Register</a>
     <a class="btn primary" id="loginTop" href="/login">Login</a>
     <button class="avatar" id="userBtn" aria-label="Account" hidden>?</button>
+    <button class="icon-btn menu-btn" id="menuBtn" aria-label="Open menu" aria-expanded="false" aria-controls="sideMenu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
   </div>
 </header>
 
+<div class="drawer-back" id="drawerBack" hidden></div>
 <div class="layout">
-<aside aria-label="Main menu">
+<aside aria-label="Main menu" id="sideMenu">
+  <div class="drawer-head"><span>MENU</span><button class="icon-btn" id="menuClose" aria-label="Close menu"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
   <div class="nav-label">WORKSPACE</div>
   <button class="nav active" data-go="overview"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Overview</button>
   <button class="nav" data-go="apis"><svg viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16"/></svg>API Explorer</button>
   <button class="nav" data-go="wallet"><svg viewBox="0 0 24 24"><circle cx="9" cy="12" r="6"/><path d="M15.5 6.5a6 6 0 010 11"/></svg>Coin Wallet</button>
-  <button class="nav" data-go="rewards"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6L12 16.7 6.7 19.6l1.1-6L3.4 9.4l6-.8z"/></svg>Daily Rewards</button>
+  <button class="nav" id="rewardsNav" data-go="rewards" hidden><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .8-4.4 4.2 1.1 6L12 16.7 6.7 19.6l1.1-6L3.4 9.4l6-.8z"/></svg>Daily Rewards</button>
   <button class="nav" data-go="history"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Coin History</button>
   <div class="nav-label">ACCOUNT</div>
   <button class="nav" data-go="profile"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg>My Profile &amp; Keys</button>
   <button class="nav" id="adminNav" data-go="admin" hidden><svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/></svg>Admin Panel</button>
+  <div class="nav-label">MUSIC</div>
+  <div class="player" id="player">
+    <div class="pl-art" id="plArt" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg></div>
+    <div class="pl-info"><b id="plTitle">Music</b><small id="plSub">Loading…</small></div>
+    <div class="pl-ctl">
+      <button id="plPrev" aria-label="Previous song"><svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9.500 12z"/></svg></button>
+      <button id="plPlay" class="pl-main" aria-label="Play music"></button>
+      <button id="plNext" aria-label="Next song"><svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5v14l10.500-7z"/></svg></button>
+    </div>
+  </div>
   <div class="me-chip" id="meChip"><span class="dot"></span><span id="meChipText">Guest</span><b id="meChipCoins"></b></div>
 </aside>
 
@@ -197,14 +238,14 @@ input:focus{border-color:var(--primary)}
     <div class="live"><span class="pulse" id="livePulse"></span><span class="t">LIVE SYSTEM STATUS</span></div>
     <div class="stats" id="statusGrid" aria-live="polite"></div>
 
-    <div class="columns" id="rewards">
-      <div class="panel">
+    <div class="columns" id="rewards" hidden>
+      <div class="panel" id="dailyPanel" hidden>
         <div class="panel-head"><div><div class="eyebrow">FREE REWARD</div><h2>Daily coin claim</h2></div><span class="pill">EVERY 24 HOURS</span></div>
         <div class="coin-big">+<span id="dailyAmt">5</span> <small>COINS</small></div>
         <p class="muted">Claim free coins every day and use them on AI and movie APIs.</p>
         <div class="claim-row"><button class="btn primary" id="claimBtn">Claim daily coins</button><span class="claim-info" id="claimMsg">Sign in to claim your reward.</span></div>
       </div>
-      <div class="panel">
+      <div class="panel" id="spinPanel" hidden>
         <div class="eyebrow">LUCKY REWARD</div><h2>Daily Lucky Spin</h2>
         <div class="wheel-wrap">
           <div style="position:relative"><div class="pointer"></div><div class="wheel" id="wheel"></div></div>
@@ -251,6 +292,18 @@ input:focus{border-color:var(--primary)}
     <div class="two"><div class="field"><label for="setDaily">Daily claim coins</label><input id="setDaily" type="number" min="1" step="1"></div><div class="field"><label for="setSpin">Biggest spin prize</label><input id="setSpin" type="number" min="5" step="1"></div><button class="btn primary" id="saveSettings" style="align-self:end">Save settings</button></div>
     <p class="muted" id="settingsMsg"></p>
     <hr class="sep">
+    <h2>Feature switches</h2>
+    <p class="muted">Show or hide the free rewards for every user. When a switch is off nobody sees that reward (admins never see them).</p>
+    <div class="switches"><label class="sw"><input type="checkbox" id="swDaily"><span class="track"></span><span>Daily coin claim</span></label><label class="sw"><input type="checkbox" id="swSpin"><span class="track"></span><span>Daily lucky spin</span></label></div>
+    <p class="muted" id="featMsg"></p>
+    <hr class="sep">
+    <div class="panel-head"><h2>API manager</h2><span class="muted"><b id="apiOn">0</b> on · <b id="apiOff">0</b> off</span></div>
+    <p class="muted">Press <b>Run health check</b> to test every API from this server. APIs that fail can be switched off in one click: they disappear from the catalog and answer 503. “Needs real input” means the example link was refused, so it is not proven broken.</p>
+    <div class="btn-row"><button class="btn primary sm" id="hcRun">Run health check</button><button class="btn sm" id="hcOffFailed" disabled>Switch off failed</button><button class="btn sm" id="hcAllOn">Switch all on</button></div>
+    <p class="muted" id="hcMsg"></p>
+    <input id="apiFilter" type="search" placeholder="Filter APIs…" aria-label="Filter APIs" autocomplete="off">
+    <div class="rows" id="apiRows"></div>
+    <hr class="sep">
     <div class="panel-head"><h2>Registered users</h2><button class="btn sm" id="loadUsers">Refresh list</button></div>
     <div class="rows" id="userRows"><div class="muted">Press refresh to load users.</div></div>
   </section>
@@ -295,6 +348,7 @@ input:focus{border-color:var(--primary)}
     </div>
   </div>
 </div>
+<div id="ytWrap" aria-hidden="true"><div id="ytHost"></div></div>
 <div class="toast" id="toast" role="status"></div>
 
 <script type="module">
@@ -340,8 +394,12 @@ $('#themeBtn').onclick = () => setTheme(document.documentElement.dataset.theme =
 // menu: every item scrolls to its section on this one page
 const sections = ['overview', 'apis', 'wallet', 'rewards', 'history', 'profile', 'admin'];
 function go(id) { const el = document.getElementById(id); if (el && !el.hidden) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); setActive(id); }
-function setActive(id) { $$('aside .nav').forEach((b) => b.classList.toggle('active', b.dataset.go === id)); const a = $('aside .nav.active'); const side = $('aside'); if (a && innerWidth <= 760) side.scrollTo({ left: a.offsetLeft - side.clientWidth / 2 + a.offsetWidth / 2, behavior: 'smooth' }); }
-document.addEventListener('click', (e) => { const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); if (g.hasAttribute('data-close-pop')) $('#userPop').hidden = true; } });
+function setActive(id) { $$('aside .nav').forEach((b) => b.classList.toggle('active', b.dataset.go === id)); }
+// mobile menu drawer (the side menu slides in from the right)
+const drawer = (open) => { $('#sideMenu').classList.toggle('open', open); $('#drawerBack').hidden = !open; $('#menuBtn').setAttribute('aria-expanded', String(open)); };
+$('#menuBtn').onclick = () => drawer(!$('#sideMenu').classList.contains('open'));
+$('#menuClose').onclick = $('#drawerBack').onclick = () => drawer(false);
+document.addEventListener('click', (e) => { const g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); if (g.hasAttribute('data-close-pop')) $('#userPop').hidden = true; if (g.classList.contains('nav')) drawer(false); } });
 if ('IntersectionObserver' in window) {
   const io = new IntersectionObserver((es) => { const v = es.filter((x) => x.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0]; if (v) setActive(v.target.id); }, { rootMargin: '-90px 0px -60% 0px' });
   sections.forEach((id) => { const el = document.getElementById(id); if (el) io.observe(el); });
@@ -351,7 +409,7 @@ if ('IntersectionObserver' in window) {
 const openModal = (id) => { $(id).hidden = false; document.body.style.overflow = 'hidden'; };
 const closeModals = () => { $$('.modal-back').forEach((m) => (m.hidden = true)); document.body.style.overflow = ''; };
 document.addEventListener('click', (e) => { if (e.target.closest('[data-close-modal]') || e.target.classList.contains('modal-back')) closeModals(); if (e.target.closest('[data-open-auth]')) { location.href = '/login'; return; } if (!e.target.closest('#userPop') && !e.target.closest('#userBtn')) $('#userPop').hidden = true; });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModals(); $('#userPop').hidden = true; } });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeModals(); $('#userPop').hidden = true; drawer(false); } });
 $('#userBtn').onclick = (e) => { e.stopPropagation(); $('#userPop').hidden = !$('#userPop').hidden; };
 
 // live status
@@ -492,6 +550,9 @@ function renderUser() {
   $('#profileInfo').textContent = u ? `${u.email} · ${admin ? 'admin' : 'user'}` : 'You are browsing as a guest. Sign in to get your API key and free coins.';
   $('#profileLogin').hidden = !!u; $('#newKey').hidden = !u; $('#usageHead').hidden = !u;
   $('#adminNav').hidden = $('#admin').hidden = !admin;
+  // free rewards: only for signed-in normal users, and only while the admin has them switched on
+  const rw = me?.rewardsOn || {}, showD = !!(u && me && !admin && rw.daily), showS = !!(u && me && !admin && rw.spin);
+  $('#dailyPanel').hidden = !showD; $('#spinPanel').hidden = !showS; $('#rewards').hidden = $('#rewardsNav').hidden = !(showD || showS); $('#rewards').classList.toggle('one', showD !== showS);
   const pending = !!(u && me?.adminPending && !admin);
   $('#verifyBanner').hidden = !pending;
   if (me?.dailyCoins) $('#dailyAmt').textContent = me.dailyCoins;
@@ -518,7 +579,7 @@ async function refreshAll() {
     $$('[data-rev]').forEach((b) => (b.onclick = async () => { if (!confirm('Revoke this key? Apps using it will stop working.')) return; try { await authed('/api/keys/revoke', { method: 'POST', body: JSON.stringify({ id: b.dataset.rev }) }); toast('Key revoked'); refreshAll(); } catch (e) { toast(e.message); } }));
     $('#usageList').innerHTML = (us.items || []).map((x) => rowHtml(x.endpoint, `−${x.coins} · ${new Date(x.createdAt).toLocaleString()}`)).join('') || '<div class="muted">No paid calls yet.</div>';
     $('#coinList').innerHTML = (ch.items || []).map((x) => rowHtml(x.reason, `${x.amount > 0 ? '+' : ''}${x.amount} → ${x.balance}`)).join('') || '<div class="muted">No coin changes yet.</div>';
-    if (me.role === 'admin') { try { const o = await authed('/api/admin/overview'); $('#adminOverview').textContent = `Registered users: ${o.users}. Give coins to any registered user by their email.`; if (document.activeElement !== $('#setDaily')) $('#setDaily').value = o.dailyCoins; if (document.activeElement !== $('#setSpin')) $('#setSpin').value = o.spinMax; } catch {} }
+    if (me.role === 'admin') { loadFeatures(); try { const o = await authed('/api/admin/overview'); $('#adminOverview').textContent = `Registered users: ${o.users}. Give coins to any registered user by their email.`; if (document.activeElement !== $('#setDaily')) $('#setDaily').value = o.dailyCoins; if (document.activeElement !== $('#setSpin')) $('#setSpin').value = o.spinMax; } catch {} }
   } catch (e) { toast(e.message); }
 }
 $('#newKey').onclick = async () => { try { const d = await authed('/api/keys', { method: 'POST', body: '{}' }); showKey(d.key); refreshAll(); } catch (e) { toast(e.message); } };
@@ -550,6 +611,73 @@ async function loadUsers() {
   } catch (e) { $('#userRows').innerHTML = `<div class="muted">${esc(e.message)}</div>`; }
 }
 $('#loadUsers').onclick = loadUsers;
+
+// ---- admin: feature switches + API manager ----
+const A = { apis: [], off: new Set(), hc: {}, t: 0 };
+const HC = { ok: ['ok', 'WORKING'], fail: ['fail', 'FAILED'], warn: ['warn', 'NEEDS REAL INPUT'], skip: ['skip', 'NOT TESTED'] };
+function renderApis() {
+  const q = $('#apiFilter').value.trim().toLowerCase();
+  $('#apiRows').innerHTML = A.apis.filter((a) => !q || `${a.name} ${a.path}`.toLowerCase().includes(q)).map((a) => { const h = A.hc[a.path], c = h && HC[h.state];
+    return `<div class="rowi"><span><b>${esc(a.name)}</b><br><span class="muted">${esc(a.path)}${a.configured ? '' : ' · not configured'}</span>${h?.note ? `<br><small class="muted">${esc(h.note)}</small>` : ''}</span><span class="btn-row">${c ? `<span class="chip ${c[0]}">${c[1]}${h.ms ? ' · ' + h.ms + 'ms' : ''}</span>` : ''}<label class="sw" aria-label="Switch ${esc(a.name)} on or off"><input type="checkbox" data-api="${esc(a.path)}" ${A.off.has(a.path) ? '' : 'checked'}><span class="track"></span></label></span></div>`; }).join('') || '<div class="muted">No API matches.</div>';
+  $('#apiOn').textContent = A.apis.length - A.off.size; $('#apiOff').textContent = A.off.size;
+  $('#hcOffFailed').disabled = !A.apis.some((a) => A.hc[a.path]?.state === 'fail' && !A.off.has(a.path));
+}
+async function saveFeatures(body, msgEl) {
+  try { await authed('/api/admin/features', { method: 'POST', body: JSON.stringify(body) }); $(msgEl).textContent = 'Saved. Everyone sees the change within about 20 seconds.'; }
+  catch (e) { $(msgEl).textContent = e.message; await loadFeatures(); }
+}
+const saveApis = () => { clearTimeout(A.t); A.t = setTimeout(() => saveFeatures({ disabledApis: [...A.off] }, '#hcMsg'), 400); };
+async function loadFeatures() {
+  try { const d = await authed('/api/admin/features'); $('#swDaily').checked = d.dailyEnabled; $('#swSpin').checked = d.spinEnabled; A.apis = d.apis; A.off = new Set(d.apis.filter((a) => !a.enabled).map((a) => a.path)); renderApis(); } catch (e) { $('#hcMsg').textContent = e.message; }
+}
+$('#swDaily').onchange = (e) => saveFeatures({ dailyEnabled: e.target.checked }, '#featMsg');
+$('#swSpin').onchange = (e) => saveFeatures({ spinEnabled: e.target.checked }, '#featMsg');
+$('#apiFilter').oninput = renderApis;
+$('#apiRows').onchange = (e) => { const p = e.target.dataset.api; if (!p) return; e.target.checked ? A.off.delete(p) : A.off.add(p); renderApis(); saveApis(); };
+$('#hcAllOn').onclick = () => { A.off.clear(); renderApis(); saveApis(); };
+$('#hcOffFailed').onclick = () => { A.apis.forEach((a) => { if (A.hc[a.path]?.state === 'fail') A.off.add(a.path); }); renderApis(); saveApis(); };
+$('#hcRun').onclick = async () => {
+  const btn = $('#hcRun'), list = A.apis.filter((a) => a.configured && !a.noProbe); btn.disabled = true; A.hc = {};
+  for (let i = 0; i < list.length; i += 6) {
+    const chunk = list.slice(i, i + 6).map((a) => a.path);
+    try { (await authed('/api/admin/healthcheck', { method: 'POST', body: JSON.stringify({ paths: chunk }) })).results.forEach((r) => (A.hc[r.path] = r)); } catch (e) { chunk.forEach((p) => (A.hc[p] = { state: 'warn', note: e.message })); }
+    $('#hcMsg').textContent = `Testing… ${Math.min(i + 6, list.length)} / ${list.length}`; renderApis();
+  }
+  const n = (s) => Object.values(A.hc).filter((x) => x.state === s).length;
+  $('#hcMsg').textContent = `Done: ${n('ok')} working, ${n('fail')} failed, ${n('warn')} need a real link to prove, ${n('skip')} not tested.`; btn.disabled = false; renderApis();
+};
+
+// ---- background music: 5 songs, autoplay, play/pause + next/previous live in the menu ----
+const TRACKS = ['IC0tkexISKI', 'rtMyIrxh_6M', '0bzYj7SdewA', 'OcAhgijN5Ec', 'iO-cx_Cqp7c'];
+const PLAY_I = '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>', PAUSE_I = '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>';
+const M = { yt: null, i: Math.min(Math.max(parseInt(store.get('pasiya_track'), 10) || 0, 0), TRACKS.length - 1), want: store.get('pasiya_music') !== 'off', playing: false, ready: false, blocked: false, fails: 0, titles: [] };
+function plRender() {
+  $('#plTitle').textContent = M.titles[M.i] || (M.ready ? 'Song ' + (M.i + 1) : 'Music');
+  $('#plSub').textContent = !M.ready ? 'Loading…' : M.fails >= TRACKS.length ? 'Songs unavailable' : M.playing ? `Playing · ${M.i + 1} / ${TRACKS.length}` : M.want && M.blocked ? 'Tap anywhere to start' : `Paused · ${M.i + 1} / ${TRACKS.length}`;
+  $('#plPlay').innerHTML = M.playing ? PAUSE_I : PLAY_I; $('#plPlay').setAttribute('aria-label', M.playing ? 'Pause music' : 'Play music'); $('#plArt').classList.toggle('on', M.playing);
+}
+function plGo(i, play = true) { M.i = (i + TRACKS.length) % TRACKS.length; store.set('pasiya_track', String(M.i)); if (M.yt?.loadVideoById) { try { play ? M.yt.loadVideoById(TRACKS[M.i]) : M.yt.cueVideoById(TRACKS[M.i]); } catch {} } plRender(); }
+const plWant = (on) => { M.want = on; store.set('pasiya_music', on ? 'on' : 'off'); };
+$('#plPlay').onclick = () => { if (!M.ready) return; if (M.playing) { plWant(false); try { M.yt.pauseVideo(); } catch {} } else { plWant(true); try { M.yt.playVideo(); } catch {} } };
+$('#plNext').onclick = () => { plWant(true); plGo(M.i + 1); };
+$('#plPrev').onclick = () => { plWant(true); plGo(M.i - 1); };
+const kick = () => { if (M.ready && M.want && !M.playing) { try { M.yt.playVideo(); } catch {} } };
+['pointerdown', 'keydown', 'touchstart'].forEach((ev) => addEventListener(ev, kick, { passive: true }));
+window.onYouTubeIframeAPIReady = () => {
+  M.yt = new YT.Player('ytHost', { width: 200, height: 200, videoId: TRACKS[M.i], playerVars: { autoplay: M.want ? 1 : 0, controls: 0, playsinline: 1, rel: 0, disablekb: 1, fs: 0, origin: location.origin }, events: {
+    onReady: () => { M.ready = true; if (M.want) { try { M.yt.playVideo(); } catch {} setTimeout(() => { if (!M.playing && M.want) { M.blocked = true; plRender(); } }, 2000); } plRender(); },
+    onAutoplayBlocked: () => { M.blocked = true; plRender(); },
+    onStateChange: (e) => {
+      if (e.data === 1) { M.playing = true; M.blocked = false; M.fails = 0; const t = M.yt.getVideoData?.().title; if (t) M.titles[M.i] = t; }
+      else if (e.data === 2 || e.data === 5) M.playing = false;
+      else if (e.data === 0) { M.playing = false; plGo(M.i + 1); }
+      plRender();
+    },
+    onError: () => { M.playing = false; if (++M.fails < TRACKS.length) plGo(M.i + 1); else plRender(); }
+  } });
+};
+plRender();
+addEventListener('load', () => { const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; s.async = true; s.onerror = () => { $('#plSub').textContent = 'Music unavailable'; }; document.head.append(s); });
 
 $('#year').textContent = new Date().getFullYear();
 renderStatus(null); renderUser(); loadCatalog(); loadStatus(); initAuth();

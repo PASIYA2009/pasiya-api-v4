@@ -147,8 +147,7 @@ const endpoints = [
     ['/api/blackbox', 'BlackBox Coder', 'coder', 1, 'Elite coding assistant - complete runnable code with short explanations', 'You are an elite coding assistant. Give complete runnable code in a code block and a very short explanation.', 'JavaScript debounce function'],
     ['/api/perplexity', 'Answer Engine', 'gpt', 1, 'Direct answers first, then key points - precise answer-engine style (no live web access)', 'Answer directly in the first sentence, then give 3-5 short key points. Be precise. Say so if you are unsure.', 'What is the capital of Australia?'],
     ['/api/duckduckgo-ai', 'Quick Answers', 'llama', 1, 'Privacy-first, short and useful answers', 'Give short, useful answers (max 5 sentences).', 'What is DNS?'],
-    ['/api/notegpt', 'NoteGPT', 'gpt', 1, 'Turn any text into clean notes, summaries, bullet points or flashcards', 'You turn the user text into clean study notes: a 1-line summary, bullet points, then 3 flashcards (Q/A). Keep the language of the text.', 'Paste any paragraph or topic here'],
-    ['/api/thenux-ai', 'Sinhala Assistant', 'gemini', 1, 'General AI chat - ask anything in Sinhala or English', 'Reply in the same language the user writes in (Sinhala, Singlish or English). Be friendly and clear.', 'ශ්‍රී ලංකාව ගැන කියන්න']
+    ['/api/notegpt', 'NoteGPT', 'gpt', 1, 'Turn any text into clean notes, summaries, bullet points or flashcards', 'You turn the user text into clean study notes: a 1-line summary, bullet points, then 3 flashcards (Q/A). Keep the language of the text.', 'Paste any paragraph or topic here']
   ].map(([path, name, model, cost, desc, persona, ex]) => ({ path, category: 'AI', name, cost, isNew: true, desc, params: prompt(ex), run: makeHandler(model, persona) })),
   { path: '/api/ai/chat', hidden: true, cost: 1, run: makeHandler(null) }
 ];

@@ -3,7 +3,8 @@ import { HttpError, json, CORS, SITE, CREATOR, stamp } from './util.js';
 import { serve, endpointHealth } from './gateway.js';
 import { account } from './account.js';
 import { status } from './status.js';
-import { ENDPOINTS, CATALOG } from './registry.js';
+import { ENDPOINTS, listCatalog } from './registry.js';
+import { getFlags } from './flags.js';
 
 async function route(req) {
   const env = process.env;
@@ -15,7 +16,7 @@ async function route(req) {
   if (p === '/api/config') return json({ success: true, signupCoins: Number(env.SIGNUP_COINS ?? 100), adminConfigured: !!String(env.ADMIN_EMAIL || '').trim(), turnstileSiteKey: env.TURNSTILE_SITE_KEY || null }, 200, { 'Cache-Control': 'public, max-age=60' });
   if (p === '/api/status') return json({ success: true, ...(await status(req, env)) }, 200, { 'Cache-Control': 'no-store' });
   if (p === '/api/endpoint-status') return json({ success: true, endpoints: endpointHealth() }, 200, { 'Cache-Control': 'no-store' });
-  if (p === '/api/catalog') return json({ success: true, apis: CATALOG }, 200, { 'Cache-Control': 'public, max-age=300' });
+  if (p === '/api/catalog') return json({ success: true, apis: listCatalog(env, await getFlags(env)) }, 200, { 'Cache-Control': 'public, max-age=30' });
 
   const def = ENDPOINTS.get(p);
   if (def && (m === 'GET' || m === 'POST')) return serve(req, env, def);

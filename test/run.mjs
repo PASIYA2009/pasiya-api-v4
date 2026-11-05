@@ -55,6 +55,7 @@ globalThis.fetch = async (input, init = {}) => {
   if (url.includes('docs.google.com')) return new Response('x', { headers: { 'content-type': 'application/pdf' } });
   if (url.includes('pixeldrain.com/api/file/abc12345/info')) return j({ success: true, name: 'a.zip', size: 10, mime_type: 'application/zip', views: 1, downloads: 2, date_upload: '2026-01-01' });
   if (url.includes('api.fxtwitter.com/user/status/1234567')) return j({ code: 200, tweet: { text: 'hi', author: { screen_name: 'user' }, media: { videos: [{ url: 'https://video.twimg.com/v.mp4', thumbnail_url: 'https://t/x.jpg', width: 720, height: 1280 }] } } });
+  if (url.includes('ipwho.is/8.8.8.8')) return j({ success: true, ip: '8.8.8.8', type: 'IPv4', country: 'United States', country_code: 'US', city: 'Mountain View', timezone: { id: 'America/Los_Angeles' }, connection: { isp: 'Google LLC' } });
   if (url.includes('open.spotify.com/oembed')) return j({ title: 'Song', thumbnail_url: 'https://i/s.jpg', html: '<iframe></iframe>' });
   if (url.includes('catbox.moe/user/api.php')) return new Response(init.body?.get?.('reqtype') === 'urlupload' && init.body.get('url') ? 'https://files.catbox.moe/abc123.jpg' : 'bad');
   if (url.includes('adaderana.lk/news/')) return new Response('<title>x</title><meta property="og:title" content="Big &amp; news"><meta property="og:image" content="https://i/n.jpg"><meta property="article:published_time" content="2026-11-01T05:00:00Z"><p>This is a long enough paragraph of the article body text for the excerpt.</p><p>Short.</p>');
@@ -183,9 +184,9 @@ r = await call('/api/usage', auth, user2); ok('usage logged', r.b.items.length =
 for (let i = 0; i < 12; i++) await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`, {}, user2);
 r = await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`, {}, user2); ok('out of coins -> 402', r.s === 402, r);
 
-r = await call('/api/status', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-vercel-id': 'sin1::abc' } }); ok('status shape', r.b.status === 'Online' && r.b.database.ok && r.b.requests24h > 5 && r.b.endpoints === 108 && r.b.categories === 10, r.b);
-r = await call('/api/catalog'); ok('catalog lists all 97', r.b.apis.length === 108, r.b.apis.length);
-r = await call('/api/catalog', {}, { ...env, SCRAPER_URL: 'https://s' }); ok('catalog same w/ SCRAPER_URL', r.b.apis.length === 108, r.b.apis.length);
+r = await call('/api/status', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-vercel-id': 'sin1::abc' } }); ok('status shape', r.b.status === 'Online' && r.b.database.ok && r.b.requests24h > 5 && r.b.endpoints === 109 && r.b.categories === 10, r.b);
+r = await call('/api/catalog'); ok('catalog lists the public APIs', r.b.apis.length === 109, r.b.apis.length);
+r = await call('/api/catalog', {}, { ...env, SCRAPER_URL: 'https://s' }); ok('catalog same w/ SCRAPER_URL', r.b.apis.length === 109, r.b.apis.length);
 r = await call('/api/daily-claim', { method: 'POST', ...auth }, user2); ok('daily claim', r.s === 200, r);
 r = await call('/api/daily-claim', { method: 'POST', ...auth }, user2); ok('daily claim twice 409', r.s === 409, r);
 r = await call('/api/spin', { method: 'POST', ...auth }, user2); ok('spin awards coins', r.s === 200 && [10,25,50,100,250].includes(r.b.reward) && r.b.index >= 0 && r.b.index < 5, r);
@@ -324,10 +325,54 @@ r = await call('/api/config'); ok('config', r.b.signupCoins === 10 && r.b.adminC
   r = await G('/api/yt/thumbnail-dl?url=' + encodeURIComponent('https://youtu.be/dQw4w9WgXcQ')); ok('yt thumbnails', r.s === 200 && r.b.result.thumbnails[0].url === 'https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg', r);
   r = await G('/api/twitter?rightsConfirmed=true&url=' + encodeURIComponent('https://x.com/user/status/1234567')); ok('twitter video', r.s === 200 && r.b.result.videos[0].url === 'https://video.twimg.com/v.mp4', r);
   r = await G('/api/twitter?url=' + encodeURIComponent('https://x.com/user/status/1234567')); ok('twitter needs rightsConfirmed', r.s === 400, r);
-  r = await G('/api/twitter_v2?rightsConfirmed=true&url=' + encodeURIComponent('https://evil.com/user/status/1234567')); ok('twitter rejects other hosts', r.s === 400, r);
+  r = await G('/api/twitter?rightsConfirmed=true&url=' + encodeURIComponent('https://evil.com/user/status/1234567')); ok('twitter rejects other hosts', r.s === 400, r);
   r = await G('/api/spotify?url=' + encodeURIComponent('https://open.spotify.com/track/abc')); ok('spotify metadata', r.s === 200 && r.b.result.title === 'Song' && r.b.result.type === 'track', r);
   r = await G('/api/yt/mp3-dl?url=' + encodeURIComponent('https://youtu.be/dQw4w9WgXcQ')); ok('yt mp3 needs rightsConfirmed', r.s === 400, r);
 }
+
+// ---- v3.8: HD downloader, QR, IP, watermark gate, admin switches, health check, removed APIs -------------------
+{
+  const G = (path, e = fast) => call(path + (path.includes('?') ? '&' : '?') + 'apikey=' + KEY, {}, e);
+  r = await call('/api/catalog'); ok('thenux-ai + twitter_v2 removed from the catalog', !r.b.apis.some((a) => /thenux|twitter_v2/.test(a.path)), r.b.apis.length);
+  r = await G('/api/thenux-ai?prompt=hi'); ok('thenux-ai route is gone (404)', r.s === 404, r);
+  r = await G('/api/video/hd?url=' + encodeURIComponent('https://youtu.be/dQw4w9WgXcQ')); ok('hd needs rightsConfirmed', r.s === 400, r);
+  r = await G('/api/video/hd?rightsConfirmed=true&url=' + encodeURIComponent('https://youtu.be/dQw4w9WgXcQ')); ok('hd youtube: best link + whatsapp tip + audio', r.s === 200 && r.b.result.best.url === 'https://gv/18' && /DOCUMENT/.test(r.b.result.whatsappTip) && r.b.result.bestAudio?.url === 'https://gv/140', r);
+  r = await G('/api/video/hd?rightsConfirmed=true&url=' + encodeURIComponent('https://www.facebook.com/watch/?v=123')); ok('hd facebook falls back to public file', r.s === 200 && r.b.result.best.url === 'https://cdn/fb.mp4', r);
+  r = await G('/api/video/hd?rightsConfirmed=true&url=' + encodeURIComponent('https://x.com/user/status/1234567')); ok('hd twitter picks highest quality', r.s === 200 && r.b.result.best.quality === '1280p', r);
+  r = await G('/api/video/hd?rightsConfirmed=true&url=' + encodeURIComponent('https://evil.example/v')); ok('hd rejects unsupported site', r.s === 400, r);
+  r = await G('/api/tools/qr?text=' + encodeURIComponent('hello') + '&size=300'); ok('qr maker', r.s === 200 && r.b.result.image.startsWith('https://api.qrserver.com/') && r.b.result.image.includes('300x300'), r);
+  r = await G('/api/tools/qr'); ok('qr needs text', r.s === 400, r);
+  r = await G('/api/tools/ip?ip=8.8.8.8'); ok('ip lookup', r.s === 200 && r.b.result.countryCode === 'US' && r.b.result.isp === 'Google LLC', r);
+  r = await G('/api/tools/ip?ip=bad/path'); ok('ip lookup rejects bad input', r.s === 400, r);
+
+  // admin switches
+  r = await call('/api/admin/features', auth, user2); ok('features: non-admin 403', r.s === 403, r);
+  r = await call('/api/admin/features', auth); ok('features: admin sees every API with enabled flag', r.s === 200 && r.b.apis.length >= 105 && r.b.apis.every((a) => a.enabled === true) && r.b.dailyEnabled === true && r.b.spinEnabled === true, r.s);
+  r = await call('/api/me', auth, user2); ok('normal user: rewards shown by default', r.b.rewardsOn.daily === true && r.b.rewardsOn.spin === true, r.b.rewardsOn);
+  r = await call('/api/me', auth); ok('admin: rewards hidden', r.b.rewardsOn.daily === false && r.b.rewardsOn.spin === false, r.b.rewardsOn);
+  r = await call('/api/admin/features', jb({ disabledApis: ['/api/tools/qr', '/api/not/real'] })); ok('admin switches an API off (unknown paths ignored)', r.s === 200 && r.b.disabledApis.join() === '/api/tools/qr', r);
+  r = await call('/api/catalog'); ok('switched-off API leaves the catalog', !r.b.apis.some((a) => a.path === '/api/tools/qr'), r.b.apis.length);
+  r = await G('/api/tools/qr?text=hi', user2); ok('switched-off API answers 503 for normal users', r.s === 503, r);
+  r = await G('/api/tools/qr?text=hi'); ok('admin can still test a switched-off API', r.s === 200, r);
+  r = await call('/api/admin/features', jb({ disabledApis: [] })); ok('admin switches it back on', r.s === 200 && r.b.disabledApis.length === 0, r);
+  r = await call('/api/admin/features', jb({ dailyEnabled: 'no' })); ok('features validates booleans', r.s === 400, r);
+  r = await call('/api/admin/features', jb({ dailyEnabled: false, spinEnabled: false })); ok('admin turns daily claim + spin off', r.s === 200 && r.b.dailyEnabled === false && r.b.spinEnabled === false, r);
+  const fresh = { ...user2, FIREBASE_PROJECT_ID: 'p' };
+  r = await call('/api/me', auth, user2); ok('rewards hidden for everyone when off', r.b.rewardsOn.daily === false && r.b.rewardsOn.spin === false, r.b.rewardsOn);
+  r = await call('/api/daily-claim', jb({}), fresh); ok('daily claim blocked while off (403)', r.s === 403, r);
+  r = await call('/api/spin', jb({}), fresh); ok('spin blocked while off (403)', r.s === 403, r);
+  r = await call('/api/admin/features', jb({ dailyEnabled: true, spinEnabled: true })); ok('admin turns them back on', r.s === 200 && r.b.dailyEnabled && r.b.spinEnabled, r);
+  r = await call('/api/daily-claim', jb({})); ok('admin cannot use free rewards (403)', r.s === 403, r);
+  r = await call('/api/spin', jb({})); ok('admin cannot spin (403)', r.s === 403, r);
+
+  // health check
+  r = await call('/api/admin/healthcheck', jb({ paths: ['/api/tools/ip', '/api/yt/thumbnail-dl', '/api/scraper/catbox/upload', '/api/nope'] }), user2); ok('healthcheck: non-admin 403', r.s === 403, r);
+  r = await call('/api/admin/healthcheck', jb({ paths: ['/api/tools/ip', '/api/yt/thumbnail-dl', '/api/scraper/catbox/upload', '/api/nope'] }));
+  const by = Object.fromEntries((r.b?.results || []).map((x) => [x.path, x.state]));
+  ok('healthcheck: working API = ok, upload API = skip, unknown path ignored', r.s === 200 && by['/api/tools/ip'] === 'ok' && by['/api/yt/thumbnail-dl'] === 'ok' && by['/api/scraper/catbox/upload'] === 'skip' && Object.keys(by).length === 3, r);
+  r = await call('/api/admin/healthcheck', jb({ paths: ['/api/news/hiru'] })); ok('healthcheck: a failing upstream is reported as fail/warn, not a crash', r.s === 200 && ['ok', 'fail', 'warn'].includes(r.b.results[0].state), r);
+}
+
 console.log('commits:', commits, 'docs:', db.size);
 console.log(fail ? `\n${fail} FAILED` : '\nALL PASSED');
 process.exit(fail ? 1 : 0);
