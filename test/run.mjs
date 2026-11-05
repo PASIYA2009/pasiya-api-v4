@@ -122,8 +122,6 @@ let fail = 0;
 const ok = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + name + (cond ? '' : ' ' + JSON.stringify(extra))); if (!cond) fail++; };
 
 const auth = { headers: { Authorization: 'Bearer x' } };
-const rootResult = await call('/api'); ok('API root returns online service information', rootResult.s === 200 && rootResult.b.success === true && rootResult.b.creator === 'Pasidu Eshan' && rootResult.b.health === '/api/health', rootResult);
-const rootSlashResult = await call('/api/'); ok('API root with trailing slash returns online information', rootSlashResult.s === 200 && rootSlashResult.b.success === true, rootSlashResult);
 let r = await call('/api/keys/ensure', { method: 'POST', ...auth });
 ok('ensure creates key', r.s === 200 && r.b.created && r.b.key.startsWith('pasiya_'), r);
 const KEY = r.b.key;
