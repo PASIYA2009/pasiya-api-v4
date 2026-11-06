@@ -96,13 +96,11 @@ globalThis.fetch = async (input, init = {}) => {
     return j({ timezone: 'Asia/Colombo', current: cur, daily: { time: ['2026-11-01'], weather_code: [61], temperature_2m_max: [31], temperature_2m_min: [25], precipitation_sum: [4], precipitation_probability_max: [70], sunrise: ['a'], sunset: ['b'] } });
   }
   if (url.includes('text.pollinations.ai')) return j({ choices: [{ message: { content: 'free hi' } }] });
-  if (url.includes('imdb.com/chart/')) return new Response('<script type="application/ld+json">' + JSON.stringify({ '@type': 'ItemList', itemListElement: [{ item: { url: 'https://www.imdb.com/title/tt1375666/', name: 'Inception', image: 'https://i/inc.jpg', aggregateRating: { ratingValue: 8.8, ratingCount: 5 } } }] }) + '</script>');
   if (url.includes('tikwm.com/api')) return j(String(init.body).includes('bad') ? { code: -1 } : { code: 0, data: { title: 'tt vid', play: 'https://cdn/tt.mp4', hdplay: 'https://cdn/tt_hd.mp4', music: '/music/a.mp3' } });
   if (url.includes('youtubei/v1/player')) return j(JSON.parse(init.body).videoId === 'LOGINNEEDED' ? { playabilityStatus: { status: 'LOGIN_REQUIRED' } } : { playabilityStatus: { status: 'OK' }, videoDetails: { title: 'Rick Roll' }, streamingData: { formats: [{ url: 'https://gv/18', mimeType: 'video/mp4; codecs="avc1"', height: 360 }, { signatureCipher: 'x', mimeType: 'video/mp4', height: 720 }], adaptiveFormats: [{ url: 'https://gv/140', mimeType: 'audio/mp4; codecs="mp4a"', bitrate: 128000, contentLength: '999' }] } });
   if (url.includes('api.cloudflare.com')) return j({ success: true, result: { response: 'cf says hi via ' + url.split('/run/')[1] } });
   if (url.includes('generativelanguage')) return j({ candidates: [{ content: { parts: [{ text: 'Hello from Gemini' }] } }] });
   if (url.includes('openrouter.ai')) return j({ error: { message: 'rate limited' } }, 429);
-  if (url.includes('themoviedb')) return j(url.includes('/search/') ? { total_results: 1, page: 1, results: [{ id: 27205, title: 'Inception', release_date: '2010-07-15', vote_average: 8.37, poster_path: '/p.jpg' }] } : { id: 27205, title: 'Inception', genres: [{ name: 'Sci-Fi' }], credits: { cast: [{ name: 'Leo' }], crew: [{ job: 'Director', name: 'Nolan' }] }, videos: { results: [{ site: 'YouTube', type: 'Trailer', key: 'abc' }] } });
   if (url.includes('pipedapi.kavin.rocks/search')) return j({ items: [{ url: '/watch?v=pipedvid001', title: 'Piped Song', uploaderName: 'PCh', views: 12, duration: 185 }] });
   if (url.includes('api.pullpush.io')) return j({ data: [{ id: 'pp1', title: 'PP thread', subreddit: 'srilanka', author: 'z', score: 4, permalink: '/r/srilanka/comments/pp1/x/' }] });
   if (url.includes('youtube.com/youtubei/v1/search') && !url.includes('FORCEFAIL')) return j({ contents: [{ videoRenderer: { videoId: 'abcdefghijk', title: { runs: [{ text: 'Sinhala Song' }] }, ownerText: { runs: [{ text: 'Chan' }] }, viewCountText: { simpleText: '5 views' }, lengthText: { simpleText: '3:10' }, thumbnail: { thumbnails: [{ url: 'https://i/y.jpg' }] } } }] });
@@ -117,8 +115,6 @@ globalThis.fetch = async (input, init = {}) => {
   if (url.includes('facebook.com/watch')) return new Response('<meta property="og:video" content="https://cdn/fb.mp4"><meta property="og:title" content="FB &amp; post"><meta content="https://i/fb.jpg" property="og:image"><meta property="og:description" content="hello">');
   if (url.includes('instagram.com')) return new Response('<html>login wall</html>');
   if (url.includes('mediafire.com')) return new Response('<title>file.zip</title><a class="x" id="downloadButton" href="https://download123.mediafire.com/f/file.zip?a=1&amp;b=2">Download</a>');
-  if (url.includes('media-imdb.com')) return j({ d: [{ id: 'tt1375666', l: 'Inception', q: 'feature', y: 2010, s: 'Leonardo DiCaprio', i: { imageUrl: 'https://i/inc.jpg' } }, { id: 'nm0000138', l: 'Leonardo' }] });
-  if (url.includes('imdb.com/title/')) return new Response('<script type="application/ld+json">' + JSON.stringify({ '@type': 'Movie', name: 'Inception', description: 'Dream &amp; heist', datePublished: '2010-07-16', duration: 'PT2H28M', genre: ['Sci-Fi'], image: 'https://i/inc.jpg', aggregateRating: { ratingValue: 8.8, ratingCount: 2000000 }, actor: [{ name: 'Leo' }], director: [{ name: 'Nolan' }] }) + '</script>');
   throw new Error('unmocked fetch ' + url);
 };
 
@@ -162,12 +158,6 @@ for (const mdl of ['gemini', 'gpt', 'deepseek', 'claude', 'llama']) { r = await 
   ok('cached stale-if-error serves last good copy', (await cached('k1', 0, fn)) === 'good'); }
 r = await call(`/api/ai/gemini?apikey=${KEY}`); ok('missing prompt 400', r.s === 400, r);
 r = await call(`/api/ai/gemini`, { method: 'POST', headers: { 'X-API-Key': KEY, 'content-type': 'application/json' }, body: JSON.stringify({ prompt: 'yo' }) }); ok('POST json + header key', r.s === 200, r);
-r = await call(`/api/movie/search?apikey=${KEY}&q=inception`); ok('movie search works with NO tmdb key (IMDb)', r.s === 200 && r.b.result.results.length === 1 && r.b.result.results[0].id === 'tt1375666' && r.b.result.results[0].poster === 'https://i/inc.jpg', r.b);
-r = await call(`/api/movie/details?apikey=${KEY}&id=tt1375666`); ok('movie details NO key (IMDb ld+json)', r.s === 200 && r.b.result.title === 'Inception' && r.b.result.runtimeMin === 148 && r.b.result.directors[0] === 'Nolan' && r.b.result.overview === 'Dream & heist' && r.b.result.rating === 8.8, r.b);
-r = await call(`/api/movie/trending?apikey=${KEY}`); ok('trending works with NO tmdb key (IMDb chart)', r.s === 200 && r.b.result.results[0].id === 'tt1375666' && r.b.result.results[0].rating === 8.8, r);
-const env2 = { ...env, TMDB_API_KEY: 't' };
-r = await call(`/api/movie/search?apikey=${KEY}&q=inception`, {}, env2); ok('tmdb search', r.s === 200 && r.b.result.results[0].poster.endsWith('/w500/p.jpg'), r);
-r = await call(`/api/movie/details?apikey=${KEY}&id=27205`, {}, env2); ok('tmdb details', r.b.result.trailer.endsWith('abc') && r.b.result.directors[0] === 'Nolan', r);
 r = await call(`/api/scraper/youtube/search?apikey=${KEY}&query=sinhala&limit=1`); ok('youtube search built-in', r.s === 200 && r.b.result.results.length === 1 && r.b.result.results[0].title === 'Sinhala "song" {x}' && r.b.result.results[0].duration === 205 && r.b.result.results[0].views === 1234 && r.b.result.results[0].url.endsWith('abc123'), r.b);
 r = await call(`/api/scraper/youtube/details?apikey=${KEY}&url=${encodeURIComponent('https://www.youtube.com/watch?v=dQw')}`); ok('youtube details built-in', r.s === 200 && r.b.result.info.title === 'Never Gonna' && r.b.result.info.duration === 212 && r.b.result.info.views === 99, r.b);
 r = await call(`/api/scraper/youtube/details?apikey=${KEY}&url=${encodeURIComponent('https://evil.example/watch?v=1')}`); ok('wrong host rejected 400', r.s === 400, r);
@@ -182,7 +172,7 @@ r = await call(`/api/scraper/facebook/download?apikey=${KEY}&url=x`); ok('downlo
 
 // coins: gemini x2 (cost1) + movie x2 ok = charged; check balance
 r = await call('/api/me', auth);
-ok('coins charged only on success (10 - 2 gemini - 2 tmdb)', r.b.coins === 10 || r.b.role === 'admin', r.b); // admin is free
+ok('coins charged only on success (10 - 2 gemini)', r.b.coins === 10 || r.b.role === 'admin', r.b); // admin is free
 const user2 = { ...env, ADMIN_EMAIL: 'someone@else.com', RATE_LIMIT_PER_MIN: '1000' };
 r = await call('/api/me', auth, user2); ok('non-admin sees user role', r.b.role === 'user', r);
 const c0 = r.b.coins;
@@ -196,10 +186,11 @@ r = await call('/api/usage', auth, user2); ok('usage logged', r.b.items.length =
 for (let i = 0; i < 12; i++) await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`, {}, user2);
 r = await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`, {}, user2); ok('out of coins -> 402', r.s === 402, r);
 
-r = await call('/api/status', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-vercel-id': 'sin1::abc' } }); ok('status shape', r.b.status === 'Online' && r.b.database.ok && r.b.requests24h > 5 && r.b.endpoints === 120 && r.b.categories === 10, r.b);
-r = await call('/api/catalog'); ok('catalog lists the public APIs', r.b.apis.length === 120, r.b.apis.length);
-r = await call('/api/catalog', {}, { ...env, SCRAPER_URL: 'https://s' }); ok('catalog same w/ SCRAPER_URL', r.b.apis.length === 120, r.b.apis.length);
-r = await call('/api/catalog', {}, { ...env, APIFY_TOKEN: 'x', TAVILY_API_KEY: 'x' }); ok('social (Apify) + Tavily APIs appear only when their key is set', r.b.apis.length === 120 + 1 && r.b.apis.some((a) => a.path === '/api/social/tiktok/profile'), r.b.apis.length);
+r = await call('/api/status', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-vercel-id': 'sin1::abc' } }); ok('status shape', r.b.status === 'Online' && r.b.database.ok && r.b.requests24h > 5 && r.b.endpoints === 117 && r.b.categories === 9, r.b);
+r = await call('/api/catalog'); ok('catalog lists the public APIs', r.b.apis.length === 117, r.b.apis.length);
+r = await call('/api/catalog', {}, { ...env, SCRAPER_URL: 'https://s' }); ok('catalog same w/ SCRAPER_URL', r.b.apis.length === 117, r.b.apis.length);
+r = await call('/api/catalog', {}, { ...env, APIFY_TOKEN: 'x', TAVILY_API_KEY: 'x' }); ok('social (Apify) + Tavily APIs appear only when their key is set', r.b.apis.length === 117 + 1 && r.b.apis.some((a) => a.path === '/api/social/tiktok/profile'), r.b.apis.length);
+r = await call('/api/load'); ok('live RAM/CPU endpoint', r.s === 200 && r.b.server.ramUsedMb > 0 && r.b.server.cpuPct >= 0 && r.b.server.cpuCores >= 1, r.b);
 r = await call('/api/daily-claim', { method: 'POST', ...auth }, user2); ok('daily claim', r.s === 200, r);
 r = await call('/api/daily-claim', { method: 'POST', ...auth }, user2); ok('daily claim twice 409', r.s === 409, r);
 r = await call('/api/spin', { method: 'POST', ...auth }, user2); ok('spin awards coins', r.s === 200 && [10,25,50,100,250].includes(r.b.reward) && r.b.index >= 0 && r.b.index < 5, r);

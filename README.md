@@ -8,7 +8,7 @@ system/                        ← the PLATFORM (no scraping here)
   util.js  db.js  gateway.js  account.js  status.js  registry.js
 scrapers/                      ← one file per site / service
   youtube  facebook  tiktok  instagram  mediafire  gdrive  catbox
-  news  weather  tv  movies  ai  download      (+ _web.js = shared helpers)
+  news  weather  tv  ai  download      (+ _web.js = shared helpers)
 ```
 
 ## Add a new scraper
@@ -27,7 +27,7 @@ Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 - Worker → one Vercel Function (Node.js runtime). `wrangler.toml` → Vercel environment variables.
 - Cloudflare Workers AI binding → REST (`CF_ACCOUNT_ID` + `CF_API_TOKEN`, free). Without it, set any of Gemini / OpenRouter / Groq / DeepSeek keys.
 - Cache and rate-limit are per server instance memory (Cloudflare Cache API doesn't exist on Vercel). Fine for this size; use Upstash/Vercel KV later if you need global limits.
-- **No keys needed now:** AI falls back to the free public Pollinations service; movie trending falls back to the IMDb chart; video downloads (YouTube / TikTok / Facebook / Instagram) return direct links from the platforms' public data. Real keys, when set, are tried first.
+- **No keys needed now:** AI falls back to the free public Pollinations service; video downloads (YouTube / TikTok / Facebook / Instagram) return direct links from the platforms' public data. Real keys, when set, are tried first.
 - Downloads are best effort (sites change; YouTube may refuse Vercel's datacenter IPs). For maximum reliability host the separate yt-dlp service (`pasiya-scraper-api`) and set `SCRAPER_URL` + `SCRAPER_SHARED_SECRET`: it then answers the download endpoints instead.
 - `maxDuration` is 30s in `vercel.json` (Hobby allows up to 60).
 
@@ -51,7 +51,7 @@ Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 ## v4.0 (fix release)
 - **AI:** official-provider chain now also has Cerebras, Mistral, GitHub Models and Anthropic; Pollinations is last and its 45 s limit is remembered (no more 14 s timeouts). Set free keys (see `.env.example`). chatgpt.com / claude.ai themselves have no public API, so they are NOT scraped: official free APIs are the reliable way.
 - **News:** each site tries its own feed + common alternate paths, then Google News (Sinhala + English, 7 days), then Bing News.
-- **Web Search:** Brave (key) -> Bing RSS -> DuckDuckGo. **Tempmail:** mail.tm with mail.gw fallback. **YouTube DL:** 3 app clients + optional cobalt (`COBALT_API_URL`). **Movies:** details example now keyless (`tt...`), trending reads IMDb `__NEXT_DATA__`; a free `TMDB_API_KEY` is still best.
+- **Web Search:** Brave (key) -> Bing RSS -> DuckDuckGo. **Tempmail:** mail.tm with mail.gw fallback. **YouTube DL:** 3 app clients + optional cobalt (`COBALT_API_URL`).
 - Health check timeout 25 s. Tests: `node test/run.mjs` and `node test/fixes.mjs`.
 - "NEEDS REAL INPUT" is normal: the example link in the test is fake, so that API is not proven broken.
 

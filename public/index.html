@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#070b14">
-<meta name="description" content="PASIYA API — weather, Sri Lanka news, TV channels, free AI models and movie data in one simple API. By Pasidu Eshan.">
+<meta name="description" content="PASIYA API — weather, Sri Lanka news, TV channels, free AI models and more in one simple API. By Pasidu Eshan.">
 <title>PASIYA API — Developer Platform</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Cpath d='M32 4l24 14v28L32 60 8 46V18z' fill='%2322d3ee'/%3E%3Ctext x='32' y='42' font-size='30' font-weight='900' text-anchor='middle' fill='%23070b14' font-family='Arial'%3EP%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -233,7 +233,7 @@ input:focus{border-color:var(--primary)}
   <div class="banner" id="verifyBanner" hidden><span id="verifyText">Verify your email to unlock the Admin Panel.</span><span class="btn-row"><button class="btn sm primary" id="resendVerify">Send verification email</button><button class="btn sm" id="iVerified">I verified, refresh</button></span></div>
   <section id="overview">
     <div class="welcome">
-      <div><div class="eyebrow">DEVELOPER CONSOLE / OVERVIEW</div><h1>Welcome to PASIYA API</h1><div class="muted">Sri Lanka news, search, utilities, weather, AI and movie data. One free API key for everything.</div></div>
+      <div><div class="eyebrow">DEVELOPER CONSOLE / OVERVIEW</div><h1>Welcome to PASIYA API</h1><div class="muted">Sri Lanka news, search, utilities, weather, AI and more. One free API key for everything.</div></div>
       <span class="pill warn" id="accountState">GUEST</span>
     </div>
     <div class="live"><span class="pulse" id="livePulse"></span><span class="t">LIVE SYSTEM STATUS</span></div>
@@ -243,7 +243,7 @@ input:focus{border-color:var(--primary)}
       <div class="panel" id="dailyPanel" hidden>
         <div class="panel-head"><div><div class="eyebrow">FREE REWARD</div><h2>Daily coin claim</h2></div><span class="pill">EVERY 24 HOURS</span></div>
         <div class="coin-big">+<span id="dailyAmt">5</span> <small>COINS</small></div>
-        <p class="muted">Claim free coins every day and use them on AI and movie APIs.</p>
+        <p class="muted">Claim free coins every day and use them on AI and other APIs.</p>
         <div class="claim-row"><button class="btn primary" id="claimBtn">Claim daily coins</button><span class="claim-info" id="claimMsg">Sign in to claim your reward.</span></div>
       </div>
       <div class="panel" id="spinPanel" hidden>
@@ -432,11 +432,24 @@ function renderStatus(s) {
     [s.server ? `${s.server.ramUsedMb} MB` : '–', s.server ? `of ${s.server.ramTotalMb} MB · ${s.server.ramPct}% used` : 'Server memory'],
     [s.server ? `${s.server.cpuPct}%` : '–', s.server ? `${s.server.cpuCores} cores · load ${s.server.load1}` : 'Server CPU']
   ] : CARDS.map(() => ['loading', '']);
-  $('#statusGrid').innerHTML = CARDS.map((c, i) => `<div class="card"><div class="k">${c[0]}</div><span class="ic ${c[2]}"><svg viewBox="0 0 24 24">${IC[c[1]]}</svg></span><div class="v ${s ? '' : 'sk'}">${esc(vals[i][0])}</div>${vals[i][2] || ''}<div class="s">${esc(vals[i][1])}</div></div>`).join('');
+  $('#statusGrid').innerHTML = CARDS.map((c, i) => `<div class="card"><div class="k">${c[0]}</div><span class="ic ${c[2]}"><svg viewBox="0 0 24 24">${IC[c[1]]}</svg></span><div class="v ${s ? '' : 'sk'}"${i > 10 ? ` id="ld${i}v"` : ''}>${esc(vals[i][0])}</div>${vals[i][2] || ''}<div class="s"${i > 10 ? ` id="ld${i}s"` : ''}>${esc(vals[i][1])}</div></div>`).join('');
   $('#livePulse').className = 'pulse' + (s && s.status !== 'Online' ? ' warn' : '');
 }
 async function measurePing() { const t = performance.now(); try { await fetch('/api/ping?_=' + Date.now(), { cache: 'no-store' }); S.pings.push(Math.round(performance.now() - t)); if (S.pings.length > 5) S.pings.shift(); } catch {} }
-let lastStatus = null;
+let lastStatus = null, loadBusy = false;
+// RAM + CPU cards: tiny /api/load call every 2 s, only those two cards are updated (no full re-render, no flicker)
+async function loadLive() {
+  if (document.hidden || loadBusy || !lastStatus) return;
+  loadBusy = true;
+  try {
+    const d = await (await fetch('/api/load?_=' + Date.now(), { cache: 'no-store' })).json(), v = d.server;
+    if (!v) return;
+    const set = (id, t) => { const el = document.getElementById(id); if (el && el.textContent !== t) el.textContent = t; };
+    set('ld11v', `${v.ramUsedMb} MB`); set('ld11s', `of ${v.ramTotalMb} MB · ${v.ramPct}% used`);
+    set('ld12v', `${v.cpuPct}%`); set('ld12s', `${v.cpuCores} cores · load ${v.load1}`);
+    lastStatus.server = v;
+  } catch { /* next tick retries */ } finally { loadBusy = false; }
+}
 async function loadStatus() {
   if (document.hidden) return;
   await measurePing();
@@ -445,7 +458,7 @@ async function loadStatus() {
 }
 
 // explorer
-const CAT = { AI: ['AI Tools', '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.500 9.500l4.700-1.800zM19 15l.8 2.200L22 18l-2.200.800L19 21l-.8-2.200L16 18l2.200-.800z"/>'], News: ['News', '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/>'], Tech: ['Tech', '<rect x="4" y="5" width="16" height="11" rx="2"/><path d="M8 20h8M12 16v4"/>'], Search: ['Search', '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>'], Utility: ['Utility', '<path d="M12 3l8 4.500v9L12 21l-8-4.500v-9zM4 7.500l8 4.500 8-4.500M12 12v9"/>'], Weather: ['Weather', '<path d="M7 18a4 4 0 010-8 5.500 5.500 0 0110.500 1.500A3.300 3.300 0 0117 18z"/>'], TV: ['TV', '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 21h8"/>'], Movies: ['Movies', '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/>'], Social: ['Social', '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.500"/><path d="M3 19c.5-3 3-5 6-5s5.500 2 6 5M16 14c3 0 4.500 2 5 5"/>'], Files: ['Files', '<path d="M6 3h8l4 4v14H6zM14 3v4h4"/>'] };
+const CAT = { AI: ['AI Tools', '<path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.500 9.500l4.700-1.800zM19 15l.8 2.200L22 18l-2.200.800L19 21l-.8-2.200L16 18l2.200-.800z"/>'], News: ['News', '<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h8M8 17h5"/>'], Tech: ['Tech', '<rect x="4" y="5" width="16" height="11" rx="2"/><path d="M8 20h8M12 16v4"/>'], Search: ['Search', '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>'], Utility: ['Utility', '<path d="M12 3l8 4.500v9L12 21l-8-4.500v-9zM4 7.500l8 4.500 8-4.500M12 12v9"/>'], Weather: ['Weather', '<path d="M7 18a4 4 0 010-8 5.500 5.500 0 0110.500 1.500A3.300 3.300 0 0117 18z"/>'], TV: ['TV', '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M8 21h8"/>'], Social: ['Social', '<circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.500"/><path d="M3 19c.5-3 3-5 6-5s5.500 2 6 5M16 14c3 0 4.500 2 5 5"/>'], Files: ['Files', '<path d="M6 3h8l4 4v14H6zM14 3v4h4"/>'] };
 const catName = (c) => (CAT[c] || [c])[0], catIcon = (c) => `<svg viewBox="0 0 24 24">${(CAT[c] || [0, '<circle cx="12" cy="12" r="8"/>'])[1]}</svg>`;
 function renderFilters() {
   const cats = ['All', ...new Set(S.catalog.map((a) => a.category))], n = (c) => (c === 'All' ? S.catalog.length : S.catalog.filter((a) => a.category === c).length);
@@ -757,6 +770,7 @@ addEventListener('load', () => { const s = document.createElement('script'); s.s
 $('#year').textContent = new Date().getFullYear();
 renderStatus(null); renderUser(); loadCatalog(); loadStatus(); initAuth();
 setInterval(loadStatus, 30000);
+setInterval(loadLive, 2000);
 setInterval(() => { if (!document.hidden) loadCatalog(); }, 30000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { loadStatus(); loadCatalog(); } });
 </script>

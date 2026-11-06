@@ -22,7 +22,7 @@ function dbHint(e) {
 // RAM = memory this instance uses (RSS) out of the memory limit Vercel gives the function (falls back to the machine total).
 // CPU = share of this instance's CPU time over the time since the previous status call (first call: a 200 ms sample).
 let cpuPrev = null, cpuLast = 0;
-async function serverLoad() {
+export async function serverLoad() {
   const mb = (b) => Math.round(b / 1048576), cores = Math.max(1, os.cpus()?.length || 1);
   if (!cpuPrev) { cpuPrev = { t: Date.now(), u: process.cpuUsage() }; await new Promise((r) => setTimeout(r, 200)); }
   const now = Date.now(), u = process.cpuUsage(), wall = now - cpuPrev.t;
