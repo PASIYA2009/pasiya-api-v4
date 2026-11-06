@@ -1,7 +1,7 @@
 // Social media data through Apify "actors" (the scraper catalogue listed in https://github.com/kawsarlog/social-media-apis).
 // Needs ONE free key: APIFY_TOKEN (https://console.apify.com/account/integrations, free plan = monthly credits).
 // v4.2: the endpoints that have a free, keyless way (see FREE below) work WITHOUT any key and use Apify only as a backup when APIFY_TOKEN is set.
-// Only Instagram Comments has no free source: it needs APIFY_TOKEN and stays hidden until it is set.
+// Every endpoint here works without a key; APIFY_TOKEN (optional) is only a backup.
 import { HttpError, fetchT, cached, clamp, param, decodeEntities, stripHtml } from '../system/util.js';
 import { safeUrl, page, meta, ogDetails, UA } from './_web.js';
 import { webSearch } from './search.js';
@@ -40,10 +40,36 @@ async function yti(endpoint, body) {
   if (!r.ok) throw new HttpError(502, 'YouTube answered HTTP ' + r.status);
   return r.json();
 }
+
+// ---- backup public instances (tried in order when the main source refuses this server) ----
+const PIPED = ['https://pipedapi.kavin.rocks', 'https://pipedapi.adminforge.de', 'https://api.piped.private.coffee'];
+const INVIDIOUS = ['https://inv.nadeko.net', 'https://yewtu.be', 'https://invidious.nerdvpn.de'];
+async function firstJson(urls) {
+  for (const u of urls) { try { const r = await fetchT(u, { headers: { 'User-Agent': UA, Accept: 'application/json' } }, 8000); if (r.ok) { const d = await r.json().catch(() => null); if (d) return d; } } catch { /* next instance */ } }
+  return null;
+}
+async function ytSearchBackup(q, n) {
+  const pd = await firstJson(PIPED.map((h) => `${h}/search?q=${encodeURIComponent(q)}&filter=videos`));
+  const pv = (pd?.items || []).filter((v) => v.url?.includes('watch?v='));
+  if (pv.length) return pv.slice(0, n).map((v) => { const id = v.url.split('v=')[1]; return { id, title: v.title, url: 'https://www.youtube.com/watch?v=' + id, channel: v.uploaderName, views: String(v.views ?? ''), duration: v.duration ? Math.floor(v.duration / 60) + ':' + String(v.duration % 60).padStart(2, '0') : '', published: v.uploadedDate || '', description: v.shortDescription || '', thumbnail: v.thumbnail || null }; });
+  const id = await firstJson(INVIDIOUS.map((h) => `${h}/api/v1/search?q=${encodeURIComponent(q)}&type=video`));
+  return (Array.isArray(id) ? id : []).filter((v) => v.videoId).slice(0, n).map((v) => ({ id: v.videoId, title: v.title, url: 'https://www.youtube.com/watch?v=' + v.videoId, channel: v.author, views: String(v.viewCount ?? ''), duration: v.lengthSeconds ? Math.floor(v.lengthSeconds / 60) + ':' + String(v.lengthSeconds % 60).padStart(2, '0') : '', published: v.publishedText || '', description: v.description || '', thumbnail: v.videoThumbnails?.[0]?.url || null }));
+}
+async function ytCommentsBackup(id, n) {
+  const pd = await firstJson(PIPED.map((h) => `${h}/comments/${id}`));
+  if (pd?.comments?.length) return pd.comments.slice(0, n).map((c) => ({ author: c.author, text: c.commentText, likes: String(c.likeCount ?? 0), published: c.commentedTime || '' }));
+  const d = await firstJson(INVIDIOUS.map((h) => `${h}/api/v1/comments/${id}`));
+  return (d?.comments || []).slice(0, n).map((c) => ({ author: c.author, text: c.content, likes: String(c.likeCount ?? 0), published: c.publishedText || '' }));
+}
+async function redditBackup(q, n) {
+  const d = await firstJson([`https://api.pullpush.io/reddit/search/submission/?q=${encodeURIComponent(q)}&size=${n}&sort_type=score&sort=desc`]);
+  return (d?.data || []).slice(0, n).map((x) => ({ id: x.id, title: x.title, subreddit: 'r/' + x.subreddit, author: x.author, score: x.score, comments: x.num_comments, url: 'https://www.reddit.com' + x.permalink, link: x.url, text: (x.selftext || '').slice(0, 500), created: x.created_utc ? new Date(x.created_utc * 1000).toISOString() : null }));
+}
 async function ytSearch(p) {
   const q = need(p.q, 'q'), n = lim(p);
   let d; try { d = await yti('search', { query: q, params: 'EgIQAQ%3D%3D' }); } catch { d = null; }
-  if (!d) { const html = await page('https://www.youtube.com/results?search_query=' + encodeURIComponent(q) + '&sp=EgIQAQ%253D%253D'); d = jsonScript(html, /var ytInitialData = (\{.*?\});<\/script>/s); }
+  if (!d || !findAll(d, 'videoRenderer').length) { try { const html = await page('https://www.youtube.com/results?search_query=' + encodeURIComponent(q) + '&sp=EgIQAQ%253D%253D'); d = jsonScript(html, /var ytInitialData = (\{.*?\});<\/script>/s); } catch { d = null; } }
+  if (!d || !findAll(d, 'videoRenderer').length) return ytSearchBackup(q, n);
   return findAll(d, 'videoRenderer').filter((v) => v.videoId).slice(0, n).map((v) => ({
     id: v.videoId, title: txt(v.title), url: 'https://www.youtube.com/watch?v=' + v.videoId, channel: txt(v.ownerText), views: txt(v.viewCountText), duration: txt(v.lengthText),
     published: txt(v.publishedTimeText), description: txt(v.detailedMetadataSnippets?.[0]?.snippetText) || txt(v.descriptionSnippet), thumbnail: v.thumbnail?.thumbnails?.at(-1)?.url || null
@@ -53,11 +79,12 @@ async function ytComments(p) {
   const url = safeUrl(p.url, ['youtube.com', 'youtu.be']), n = lim(p);
   const id = (url.match(/youtu\.be\/([\w-]{11})/) || url.match(/[?&]v=([\w-]{11})/) || url.match(/\/(?:shorts|live|embed)\/([\w-]{11})/) || [])[1];
   if (!id) throw new HttpError(400, 'Not a YouTube video link.');
-  const first = await yti('next', { videoId: id });
+  let first; try { first = await yti('next', { videoId: id }); } catch { first = null; }
+  if (!first) { const b = await ytCommentsBackup(id, n); if (b.length) return b; throw new HttpError(502, 'YouTube comments are not reachable right now.'); }
   const sec = findAll(first, 'itemSectionRenderer').find((x) => x.sectionIdentifier === 'comment-item-section');
   const token = sec && findAll(sec, 'continuationCommand')[0]?.token;
-  if (!token) throw new HttpError(404, 'Comments are turned off or not available for this video.');
-  const d = await yti('next', { continuation: token });
+  if (!token) { const b = await ytCommentsBackup(id, n); if (b.length) return b; throw new HttpError(404, 'Comments are turned off or not available for this video.'); }
+  let d; try { d = await yti('next', { continuation: token }); } catch { const b = await ytCommentsBackup(id, n); if (b.length) return b; throw new HttpError(502, 'YouTube comments are not reachable right now.'); }
   const ent = new Map(); for (const m of d.frameworkUpdates?.entityBatchUpdate?.mutations || []) { const c = m.payload?.commentEntityPayload; if (c) ent.set(c.key, c); }
   const out = [];
   for (const th of findAll(d, 'commentThreadRenderer')) {
@@ -78,8 +105,8 @@ async function redditSearch(p) {
       if (items.length) return items;
     } catch { /* try next host */ }
   }
-  const r = await fetchT(`https://www.reddit.com/search.rss?q=${enc}&limit=${n}&sort=relevance`, { headers: { 'User-Agent': UA } }, 12000);
-  if (!r.ok) throw new HttpError(502, 'Reddit refused the request (HTTP ' + r.status + ').');
+  let r; try { r = await fetchT(`https://www.reddit.com/search.rss?q=${enc}&limit=${n}&sort=relevance`, { headers: { 'User-Agent': UA } }, 12000); } catch { r = { ok: false, status: 'no answer' }; }
+  if (!r.ok) { const b = await redditBackup(q, n); if (b.length) return b; throw new HttpError(502, 'Reddit refused the request (HTTP ' + r.status + ').'); }
   const xml = await r.text();
   return [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].slice(0, n).map((m) => { const e = m[1], g = (re) => (e.match(re) || [])[1] || '';
     return { title: decodeEntities(g(/<title>([\s\S]*?)<\/title>/)), author: g(/<name>\/u\/([^<]*)<\/name>/), subreddit: g(/<category[^>]*label="([^"]*)"/), url: g(/<link[^>]*href="([^"]*)"/), text: stripHtml(decodeEntities(g(/<content[^>]*>([\s\S]*?)<\/content>/))).slice(0, 500), created: g(/<updated>([^<]*)<\/updated>/) }; });
@@ -89,7 +116,9 @@ async function tiktokProfile(p) {
   const html = await page('https://www.tiktok.com/@' + encodeURIComponent(u), { Referer: 'https://www.tiktok.com/' });
   const d = jsonScript(html, /<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)<\/script>/s)?.__DEFAULT_SCOPE__?.['webapp.user-detail'];
   if (!d?.userInfo?.user) throw new HttpError(404, 'TikTok user not found (or TikTok blocked this server).');
-  const { user, stats } = d.userInfo;
+  const { user } = d.userInfo, stats = { ...d.userInfo.stats }, v2 = d.userInfo.statsV2 || {};
+  // TikTok's plain counters overflow a 32-bit number for big accounts (negative likes); statsV2 holds the real value as text.
+  for (const k of ['followerCount', 'followingCount', 'heartCount', 'videoCount']) if (v2[k] != null && Number.isFinite(Number(v2[k]))) stats[k] = Number(v2[k]); else if (stats[k] < 0) stats[k] += 2 ** 32;
   return [{ id: user.id, username: user.uniqueId, nickname: user.nickname, bio: user.signature, verified: !!user.verified, private: !!user.privateAccount, avatar: user.avatarLarger || user.avatarMedium, followers: stats?.followerCount, following: stats?.followingCount, likes: stats?.heartCount, videos: stats?.videoCount, url: 'https://www.tiktok.com/@' + user.uniqueId }];
 }
 async function igUser(p) {
@@ -191,7 +220,6 @@ export default [
   E('instagram/posts', 'Instagram Posts', 'Latest posts of a public Instagram user', 'apify~instagram-post-scraper', [param('username', 'natgeo', 'Instagram username'), L], (p) => ({ username: [handle(p.username, 'username')], resultsLimit: lim(p) }), 'instagram'),
   E('instagram/reels', 'Instagram Reels', 'Latest reels of a public Instagram user', 'apify~instagram-reel-scraper', [param('username', 'natgeo', 'Instagram username'), L], (p) => ({ username: [handle(p.username, 'username')], resultsLimit: lim(p) }), 'instagram'),
   E('instagram/hashtag', 'Instagram Hashtag', 'Recent posts of an Instagram hashtag', 'apify~instagram-hashtag-scraper', [param('tag', 'srilanka', 'Hashtag (no #)'), L], (p) => ({ hashtags: [need(p.tag, 'tag', 60).replace(/^#/, '')], resultsLimit: lim(p) }), 'instagram'),
-  E('instagram/comments', 'Instagram Comments', 'Comments of a public post / reel', 'apify~instagram-comment-scraper', [param('url', 'https://www.instagram.com/p/abc/', 'Post or reel link'), L], (p) => ({ directUrls: [safeUrl(p.url, ['instagram.com'])], resultsLimit: lim(p, 20) }), 'instagram'),
   E('twitter/search', 'X (Twitter) Search', 'Search public tweets by keyword', 'apidojo~tweet-scraper', [param('q', 'sri lanka cricket', 'Search text'), param('limit', '10', '1-30 tweets', false)], (p) => ({ searchTerms: [need(p.q, 'q')], maxItems: lim(p), sort: 'Latest' }), 'twitter'),
   E('twitter/profile', 'X (Twitter) Profile Tweets', 'Latest tweets of a public X account', 'apidojo~tweet-scraper', [param('username', 'elonmusk', 'X username'), param('limit', '10', '1-30 tweets', false)], (p) => ({ twitterHandles: [handle(p.username, 'username')], maxItems: lim(p), sort: 'Latest' }), 'twitter'),
   E('youtube/search', 'YouTube Search', 'Search YouTube videos (title, views, channel, likes)', 'streamers~youtube-scraper', [param('q', 'sinhala songs', 'Search text'), param('limit', '10', '1-30 videos', false)], (p) => ({ searchQueries: [need(p.q, 'q')], maxResults: lim(p), maxResultsShorts: 0, maxResultStreams: 0 }), 'youtube'),
