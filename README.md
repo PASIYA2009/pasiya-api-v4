@@ -31,6 +31,9 @@ Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 - Downloads are best effort (sites change; YouTube may refuse Vercel's datacenter IPs). For maximum reliability host the separate yt-dlp service (`pasiya-scraper-api`) and set `SCRAPER_URL` + `SCRAPER_SHARED_SECRET`: it then answers the download endpoints instead.
 - `maxDuration` is 30s in `vercel.json` (Hobby allows up to 60).
 
+## v4.2
+- **Music:** the 5 built-in songs are removed. The default is now one song (`https://youtu.be/-LDyd-Cba0A`). **Admin Panel > Background music**: paste any YouTube link + *Add song*, or *Remove* a song. Saved in Firestore `settings/music`; public list at `GET /api/music`; visitors pick up changes within ~30 s.
+
 ## v4.1
 - **Tempmail:** Guerrilla Mail is now tried first (mail.tm / mail.gw as backup). Same 3 endpoints, same `id` flow; an expired Guerrilla session is rebuilt automatically.
 - **Switched-off APIs vanish for users:** the catalog is no longer cached, the server flag cache is 8 s, and the dashboard re-reads the API list every 30 s (and when the tab opens), so users no longer need to reload. A failed refresh keeps the current list.

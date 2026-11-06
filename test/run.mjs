@@ -362,6 +362,12 @@ r = await call('/api/config'); ok('config', r.b.signupCoins === 10 && r.b.adminC
   r = await call('/api/me', auth, user2); ok('rewards hidden for everyone when off', r.b.rewardsOn.daily === false && r.b.rewardsOn.spin === false, r.b.rewardsOn);
   r = await call('/api/daily-claim', jb({}), fresh); ok('daily claim blocked while off (403)', r.s === 403, r);
   r = await call('/api/spin', jb({}), fresh); ok('spin blocked while off (403)', r.s === 403, r);
+  r = await call('/api/music'); ok('music: public list defaults to the new song', r.s === 200 && r.b.tracks.length === 1 && r.b.tracks[0].id === '-LDyd-Cba0A', r);
+  r = await call('/api/admin/music', jb({ tracks: [] }), user2); ok('music: non-admin 403', r.s === 403, r);
+  r = await call('/api/admin/music', jb({ tracks: ['https://youtu.be/-LDyd-Cba0A?si=x', { url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', title: 'T' }, 'dQw4w9WgXcQ'] })); ok('music: admin saves URLs (ids extracted, duplicates dropped)', r.s === 200 && r.b.tracks.map((x) => x.id).join() === '-LDyd-Cba0A,dQw4w9WgXcQ', r);
+  r = await call('/api/music'); ok('music: public list shows the saved songs', r.b.tracks.length === 2, r);
+  r = await call('/api/admin/music', jb({ tracks: ['https://evil.example/x'] })); ok('music: rejects non-YouTube link', r.s === 400, r);
+  r = await call('/api/admin/music', jb({ tracks: [] })); ok('music: admin can remove all', r.s === 200 && r.b.tracks.length === 0, r);
   r = await call('/api/admin/features', jb({ dailyEnabled: true, spinEnabled: true })); ok('admin turns them back on', r.s === 200 && r.b.dailyEnabled && r.b.spinEnabled, r);
   r = await call('/api/daily-claim', jb({})); ok('admin cannot use free rewards (403)', r.s === 403, r);
   r = await call('/api/spin', jb({})); ok('admin cannot spin (403)', r.s === 403, r);

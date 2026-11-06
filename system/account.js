@@ -1,5 +1,5 @@
 // Dashboard account endpoints: profile, API keys, daily claim, lucky spin, usage, admin tools.
-import { HttpError, stamp, sha256, randomHex } from './util.js';
+import { HttpError, stamp, sha256, randomHex, ytId } from './util.js';
 import * as fs from './db.js';
 import { session, forgetKeys, isAdminEmail } from './gateway.js';
 import { getFlags, resetFlags } from './flags.js';
@@ -21,8 +21,18 @@ async function rewardSettings(env) {
 const today = (env) => new Date(Date.now() + Number(env.RESET_UTC_OFFSET_MIN ?? 330) * 60000).toISOString().slice(0, 10);
 const body = async (req) => { try { return await req.json(); } catch { throw new HttpError(400, 'Body must be valid JSON.'); } };
 
+// ---- background music: the playlist is stored in Firestore settings/music and edited from the Admin Panel ----
+export const DEFAULT_TRACKS = [{ id: '-LDyd-Cba0A', title: '' }];
+export async function getTracks(env) {
+  let s = null;
+  try { s = await fs.get(env, 'settings', 'music'); } catch { /* use default */ }
+  if (!s || !Array.isArray(s.tracks)) return DEFAULT_TRACKS;
+  return s.tracks.filter((t) => t && /^[\w-]{11}$/.test(t.id || '')).map((t) => ({ id: t.id, title: String(t.title || '').slice(0, 120) }));
+}
+
 const resolveBucket = new Map();
 export async function account(req, env, p, m) {
+  if (p === '/api/music' && m === 'GET') return { success: true, tracks: await getTracks(env) };
   if (p === '/api/me' && m === 'GET') {
     const c = await session(req, env);
     const r = await rewardSettings(env), fl = await getFlags(env);
@@ -126,6 +136,18 @@ export async function account(req, env, p, m) {
       if (!posInt(b.dailyCoins, 1, 100000) || !posInt(b.spinMax, 5, 1000000)) throw new HttpError(400, 'Daily coins must be 1-100000 and the biggest spin prize 5-1000000 (whole numbers).');
       await fs.commit(env, [{ merge: ['settings', 'rewards', { dailyCoins: b.dailyCoins, spinMax: b.spinMax, updatedAt: stamp(), updatedBy: c.u.email }] }]);
       return { message: 'Reward settings saved.', ...(await rewardSettings(env)) };
+    }
+    if (p === '/api/admin/music' && m === 'POST') {
+      const b = await body(req);
+      if (!Array.isArray(b.tracks) || b.tracks.length > 50) throw new HttpError(400, 'tracks must be a list of at most 50 songs.');
+      const seen = new Set(), tracks = [];
+      for (const t of b.tracks) {
+        const id = ytId(typeof t === 'string' ? t : t?.url || t?.id);
+        if (!id) throw new HttpError(400, `Not a valid YouTube link: ${String(typeof t === 'string' ? t : t?.url || t?.id || '').slice(0, 80)}`);
+        if (!seen.has(id)) { seen.add(id); tracks.push({ id, title: String(t?.title || '').slice(0, 120) }); }
+      }
+      await fs.commit(env, [{ merge: ['settings', 'music', { tracks, updatedAt: stamp(), updatedBy: c.u.email }] }]);
+      return { message: 'Songs saved.', tracks };
     }
     if (p === '/api/admin/features' && m === 'GET') {
       const fl = await getFlags(env);

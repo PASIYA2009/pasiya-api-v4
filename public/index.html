@@ -298,6 +298,12 @@ input:focus{border-color:var(--primary)}
     <div class="switches"><label class="sw"><input type="checkbox" id="swDaily"><span class="track"></span><span>Daily coin claim</span></label><label class="sw"><input type="checkbox" id="swSpin"><span class="track"></span><span>Daily lucky spin</span></label></div>
     <p class="muted" id="featMsg"></p>
     <hr class="sep">
+    <div class="panel-head"><h2>Background music</h2><span class="muted"><b id="musicCount">0</b> songs</span></div>
+    <p class="muted">Paste a YouTube song link and press <b>Add song</b>. Remove any song with its button. Changes reach every visitor within about 30 seconds.</p>
+    <div class="form-stack"><input id="musicUrl" type="url" placeholder="https://youtu.be/-LDyd-Cba0A" aria-label="YouTube song link" autocomplete="off"><button class="btn primary" id="musicAdd">Add song</button></div>
+    <p class="muted" id="musicMsg"></p>
+    <div class="rows" id="musicRows"></div>
+    <hr class="sep">
     <div class="panel-head"><h2>API manager</h2><span class="muted"><b id="apiOn">0</b> on · <b id="apiOff">0</b> off</span></div>
     <p class="muted">Press <b>Run health check</b> to test every API from this server. APIs that fail can be switched off in one click: they disappear from the catalog and answer 503. “Needs real input” means the example link was refused, so it is not proven broken.</p>
     <div class="btn-row"><button class="btn primary sm" id="hcRun">Run health check</button><button class="btn sm" id="hcOffFailed" disabled>Switch off failed</button><button class="btn sm" id="hcAllOn">Switch all on</button></div>
@@ -587,7 +593,7 @@ async function refreshAll() {
     $$('[data-rev]').forEach((b) => (b.onclick = async () => { if (!confirm('Revoke this key? Apps using it will stop working.')) return; try { await authed('/api/keys/revoke', { method: 'POST', body: JSON.stringify({ id: b.dataset.rev }) }); toast('Key revoked'); refreshAll(); } catch (e) { toast(e.message); } }));
     $('#usageList').innerHTML = (us.items || []).map((x) => rowHtml(x.endpoint, `−${x.coins} · ${new Date(x.createdAt).toLocaleString()}`)).join('') || '<div class="muted">No paid calls yet.</div>';
     $('#coinList').innerHTML = (ch.items || []).map((x) => rowHtml(x.reason, `${x.amount > 0 ? '+' : ''}${x.amount} → ${x.balance}`)).join('') || '<div class="muted">No coin changes yet.</div>';
-    if (me.role === 'admin') { loadFeatures(); try { const o = await authed('/api/admin/overview'); $('#adminOverview').textContent = `Registered users: ${o.users}. Give coins to any registered user by their email.`; if (document.activeElement !== $('#setDaily')) $('#setDaily').value = o.dailyCoins; if (document.activeElement !== $('#setSpin')) $('#setSpin').value = o.spinMax; } catch {} }
+    if (me.role === 'admin') { loadFeatures(); loadAdminMusic(); try { const o = await authed('/api/admin/overview'); $('#adminOverview').textContent = `Registered users: ${o.users}. Give coins to any registered user by their email.`; if (document.activeElement !== $('#setDaily')) $('#setDaily').value = o.dailyCoins; if (document.activeElement !== $('#setSpin')) $('#setSpin').value = o.spinMax; } catch {} }
   } catch (e) { toast(e.message); }
 }
 $('#newKey').onclick = async () => { try { const d = await authed('/api/keys', { method: 'POST', body: '{}' }); showKey(d.key); refreshAll(); } catch (e) { toast(e.message); } };
@@ -669,35 +675,80 @@ $('#hcRun').onclick = async () => {
   $('#hcMsg').textContent = `Done: ${n('ok')} working, ${n('fail')} failed, ${n('warn')} need a real link to prove, ${n('skip')} not tested.`; btn.disabled = false; renderApis();
 };
 
-// ---- background music: 5 songs, autoplay, play/pause + next/previous live in the menu ----
-const TRACKS = ['IC0tkexISKI', 'rtMyIrxh_6M', '0bzYj7SdewA', 'OcAhgijN5Ec', 'iO-cx_Cqp7c'];
+// ---- admin: background music manager ----
+const MU = { tracks: [] };
+function renderMusic() {
+  $('#musicCount').textContent = MU.tracks.length;
+  $('#musicRows').innerHTML = MU.tracks.length ? MU.tracks.map((t, i) => `<div class="rowi"><span><b>${esc(t.title || 'YouTube song')}</b><br><a class="muted" href="https://youtu.be/${esc(t.id)}" target="_blank" rel="noopener">youtu.be/${esc(t.id)}</a></span><span class="btn-row"><button class="btn sm" data-mrm="${i}">Remove</button></span></div>`).join('') : '<div class="muted">No songs. Add a YouTube link above.</div>';
+}
+async function saveMusic(msg) {
+  try { const d = await authed('/api/admin/music', { method: 'POST', body: JSON.stringify({ tracks: MU.tracks }) }); MU.tracks = d.tracks; $('#musicMsg').textContent = msg || d.message; loadMusic(); }
+  catch (e) { $('#musicMsg').textContent = e.message; await loadAdminMusic(); }
+  renderMusic();
+}
+async function loadAdminMusic() { try { MU.tracks = (await (await fetch('/api/music', { cache: 'no-store' })).json()).tracks || []; } catch {} renderMusic(); }
+$('#musicAdd').onclick = async () => {
+  const url = $('#musicUrl').value.trim(); if (!url) { $('#musicMsg').textContent = 'Paste a YouTube link first.'; return; }
+  const m = url.match(/(?:youtu\.be\/|v=|shorts\/|embed\/|live\/)([\w-]{11})/) || url.match(/^([\w-]{11})$/);
+  if (!m) { $('#musicMsg').textContent = 'That is not a YouTube link.'; return; }
+  if (MU.tracks.some((t) => t.id === m[1])) { $('#musicMsg').textContent = 'That song is already in the list.'; return; }
+  let title = ''; try { title = (await (await fetch('https://www.youtube.com/oembed?format=json&url=' + encodeURIComponent('https://youtu.be/' + m[1]))).json()).title || ''; } catch {}
+  MU.tracks.push({ id: m[1], title }); $('#musicUrl').value = ''; renderMusic(); await saveMusic('Song added.');
+};
+$('#musicUrl').onkeydown = (e) => { if (e.key === 'Enter') $('#musicAdd').click(); };
+$('#musicRows').onclick = (e) => { const i = e.target.dataset?.mrm; if (i == null) return; MU.tracks.splice(Number(i), 1); renderMusic(); saveMusic('Song removed.'); };
+
+// ---- background music: playlist comes from the server (Admin Panel > Background music); play/pause + next/previous live in the menu ----
+let TRACKS = [{ id: '-LDyd-Cba0A', title: '' }];
 const PLAY_I = '<svg viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></svg>', PAUSE_I = '<svg viewBox="0 0 24 24"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>';
-const M = { yt: null, i: Math.min(Math.max(parseInt(store.get('pasiya_track'), 10) || 0, 0), TRACKS.length - 1), want: store.get('pasiya_music') !== 'off', playing: false, ready: false, blocked: false, fails: 0, titles: [] };
+const M = { yt: null, i: 0, want: store.get('pasiya_music') !== 'off', playing: false, ready: false, blocked: false, fails: 0, titles: {}, loaded: false };
+const trackName = () => M.titles[TRACKS[M.i]?.id] || TRACKS[M.i]?.title || (M.ready ? 'Song ' + (M.i + 1) : 'Music');
 function plRender() {
-  $('#plTitle').textContent = M.titles[M.i] || (M.ready ? 'Song ' + (M.i + 1) : 'Music');
-  $('#plSub').textContent = !M.ready ? 'Loading…' : M.fails >= TRACKS.length ? 'Songs unavailable' : M.playing ? `Playing · ${M.i + 1} / ${TRACKS.length}` : M.want && M.blocked ? 'Tap anywhere to start' : `Paused · ${M.i + 1} / ${TRACKS.length}`;
+  $('#plTitle').textContent = trackName();
+  $('#plSub').textContent = !M.ready ? 'Loading…' : !TRACKS.length ? 'No songs added' : M.fails >= TRACKS.length ? 'Songs unavailable' : M.playing ? `Playing · ${M.i + 1} / ${TRACKS.length}` : M.want && M.blocked ? 'Tap anywhere to start' : `Paused · ${M.i + 1} / ${TRACKS.length}`;
   $('#plPlay').innerHTML = M.playing ? PAUSE_I : PLAY_I; $('#plPlay').setAttribute('aria-label', M.playing ? 'Pause music' : 'Play music'); $('#plArt').classList.toggle('on', M.playing);
 }
-function plGo(i, play = true) { M.i = (i + TRACKS.length) % TRACKS.length; store.set('pasiya_track', String(M.i)); if (M.yt?.loadVideoById) { try { play ? M.yt.loadVideoById(TRACKS[M.i]) : M.yt.cueVideoById(TRACKS[M.i]); } catch {} } plRender(); }
+function plGo(i, play = true) { if (!TRACKS.length) return; M.i = (i + TRACKS.length) % TRACKS.length; store.set('pasiya_track', TRACKS[M.i].id); if (M.yt?.loadVideoById) { try { play ? M.yt.loadVideoById(TRACKS[M.i].id) : M.yt.cueVideoById(TRACKS[M.i].id); } catch {} } plRender(); }
 const plWant = (on) => { M.want = on; store.set('pasiya_music', on ? 'on' : 'off'); };
-$('#plPlay').onclick = () => { if (!M.ready) return; if (M.playing) { plWant(false); try { M.yt.pauseVideo(); } catch {} } else { plWant(true); try { M.yt.playVideo(); } catch {} } };
+$('#plPlay').onclick = () => { if (!M.ready || !TRACKS.length) return; if (M.playing) { plWant(false); try { M.yt.pauseVideo(); } catch {} } else { plWant(true); try { M.yt.playVideo(); } catch {} } };
 $('#plNext').onclick = () => { plWant(true); plGo(M.i + 1); };
 $('#plPrev').onclick = () => { plWant(true); plGo(M.i - 1); };
-const kick = () => { if (M.ready && M.want && !M.playing) { try { M.yt.playVideo(); } catch {} } };
+const kick = () => { if (M.ready && M.want && !M.playing && TRACKS.length) { try { M.yt.playVideo(); } catch {} } };
 ['pointerdown', 'keydown', 'touchstart'].forEach((ev) => addEventListener(ev, kick, { passive: true }));
-window.onYouTubeIframeAPIReady = () => {
-  M.yt = new YT.Player('ytHost', { width: 200, height: 200, videoId: TRACKS[M.i], playerVars: { autoplay: M.want ? 1 : 0, controls: 0, playsinline: 1, rel: 0, disablekb: 1, fs: 0, origin: location.origin }, events: {
-    onReady: () => { M.ready = true; if (M.want) { try { M.yt.playVideo(); } catch {} setTimeout(() => { if (!M.playing && M.want) { M.blocked = true; plRender(); } }, 2000); } plRender(); },
+// Apply a new playlist from the server. Keeps the current song playing if it is still in the list.
+function applyTracks(list) {
+  const cur = TRACKS[M.i]?.id, same = JSON.stringify(list.map((t) => t.id)) === JSON.stringify(TRACKS.map((t) => t.id));
+  TRACKS = list; list.forEach((t) => { if (t.title) M.titles[t.id] ||= t.title; });
+  if (same) { plRender(); return; }
+  const keep = list.findIndex((t) => t.id === cur);
+  if (keep >= 0) { M.i = keep; plRender(); return; }
+  const saved = list.findIndex((t) => t.id === store.get('pasiya_track'));
+  M.i = M.loaded ? 0 : Math.max(saved, 0); M.fails = 0;
+  if (!list.length) { try { M.yt?.stopVideo(); } catch {} M.playing = false; plRender(); return; }
+  if (M.yt?.loadVideoById) { try { M.want && M.loaded ? M.yt.loadVideoById(list[M.i].id) : M.yt.cueVideoById(list[M.i].id); } catch {} }
+  plRender();
+}
+async function loadMusic() {
+  try { const d = await (await fetch('/api/music', { cache: 'no-store' })).json(); if (Array.isArray(d.tracks)) applyTracks(d.tracks); } catch { /* keep the current list */ }
+  M.loaded = true; if (M.pendingInit) { M.pendingInit(); M.pendingInit = null; }
+}
+function initPlayer() {
+  M.yt = new YT.Player('ytHost', { width: 200, height: 200, videoId: TRACKS[M.i]?.id, playerVars: { autoplay: M.want ? 1 : 0, controls: 0, playsinline: 1, rel: 0, disablekb: 1, fs: 0, origin: location.origin }, events: {
+    onReady: () => { M.ready = true; if (M.want && TRACKS.length) { try { M.yt.playVideo(); } catch {} setTimeout(() => { if (!M.playing && M.want) { M.blocked = true; plRender(); } }, 2000); } plRender(); },
     onAutoplayBlocked: () => { M.blocked = true; plRender(); },
     onStateChange: (e) => {
-      if (e.data === 1) { M.playing = true; M.blocked = false; M.fails = 0; const t = M.yt.getVideoData?.().title; if (t) M.titles[M.i] = t; }
+      if (e.data === 1) { M.playing = true; M.blocked = false; M.fails = 0; const t = M.yt.getVideoData?.().title; if (t && TRACKS[M.i]) M.titles[TRACKS[M.i].id] = t; }
       else if (e.data === 2 || e.data === 5) M.playing = false;
       else if (e.data === 0) { M.playing = false; plGo(M.i + 1); }
       plRender();
     },
     onError: () => { M.playing = false; if (++M.fails < TRACKS.length) plGo(M.i + 1); else plRender(); }
   } });
-};
+}
+// The player is created only after BOTH the YouTube API and the playlist have arrived.
+window.onYouTubeIframeAPIReady = () => { M.apiReady = true; M.loaded ? initPlayer() : (M.pendingInit = initPlayer); };
+loadMusic();
+setInterval(() => { if (!document.hidden) loadMusic(); }, 30000);
 plRender();
 addEventListener('load', () => { const s = document.createElement('script'); s.src = 'https://www.youtube.com/iframe_api'; s.async = true; s.onerror = () => { $('#plSub').textContent = 'Music unavailable'; }; document.head.append(s); });
 

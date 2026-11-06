@@ -68,3 +68,15 @@ export async function cached(key, ttlSec, fn) {
   mem.set(key, { v, exp: now + ttlSec * 1000, stale: now + STALE_MS });
   return v;
 }
+
+// ---- YouTube link -> 11-character video id (accepts watch, youtu.be, shorts, embed, music.youtube.com links or a bare id) ----
+export function ytId(input) {
+  const t = String(input || '').trim();
+  if (/^[\w-]{11}$/.test(t)) return t;
+  let u; try { u = new URL(/^https?:\/\//i.test(t) ? t : 'https://' + t); } catch { return null; }
+  const h = u.hostname.replace(/^(www|m|music)\./, '');
+  let id = null;
+  if (h === 'youtu.be') id = u.pathname.split('/')[1];
+  else if (h === 'youtube.com' || h === 'youtube-nocookie.com') id = u.pathname === '/watch' ? u.searchParams.get('v') : (u.pathname.match(/^\/(?:shorts|embed|live|v)\/([\w-]{11})/) || [])[1];
+  return /^[\w-]{11}$/.test(id || '') ? id : null;
+}
