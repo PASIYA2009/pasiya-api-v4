@@ -171,7 +171,7 @@ export async function account(req, env, p, m) {
       const b = await body(req);
       const defs = (Array.isArray(b.paths) ? b.paths : []).slice(0, 6).map((x) => ENDPOINTS.get(String(x))).filter(Boolean);
       const results = await Promise.all(defs.map(async (d) => {
-        if (d.noProbe) return { path: d.path, state: 'skip', note: 'Not tested automatically (it uploads or changes something).' };
+        if (d.noProbe) return { path: d.path, state: 'skip', note: 'Not tested automatically (needs your own file link / mailbox id, or it uploads something).' };
         if (!(d.needsEnv ? d.needsEnv.every((k) => env[k]) : true)) return { path: d.path, state: 'skip', note: 'Not configured on this server.' };
         const t0 = Date.now(), params = Object.fromEntries((d.params || []).filter((x) => x.example !== '').map((x) => [x.name, x.example]));
         try {

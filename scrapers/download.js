@@ -101,7 +101,7 @@ const dl = (site, name, ex, what, run) => ({ path: `/api/scraper/${site}/downloa
 
 export default [
   dl('youtube', 'YouTube', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'a public video (video or audio)', youtube),
-  dl('tiktok', 'TikTok', 'https://www.tiktok.com/@user/video/123', 'a public TikTok video (video or audio)', tiktok),
-  dl('facebook', 'Facebook', 'https://www.facebook.com/watch/?v=123', 'a public Facebook video', social('facebook', 'Facebook', ['facebook.com', 'fb.watch'])),
-  dl('instagram', 'Instagram', 'https://www.instagram.com/reel/abc/', 'a public Instagram reel / video', social('instagram', 'Instagram', ['instagram.com']))
+  dl('tiktok', 'TikTok', 'https://www.tiktok.com/@scout2015/video/6718335390845095173', 'a public TikTok video (video or audio)', tiktok),
+  dl('facebook', 'Facebook', 'https://www.facebook.com/watch/?v=10153231379946729', 'a public Facebook video', social('facebook', 'Facebook', ['facebook.com', 'fb.watch'])),
+  dl('instagram', 'Instagram', 'https://www.instagram.com/p/fA9uwTtkSN/', 'a public Instagram reel / video', social('instagram', 'Instagram', ['instagram.com']))
 ];

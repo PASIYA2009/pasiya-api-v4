@@ -24,5 +24,5 @@ async function resolve(p) {
 }
 
 export default [
-  { path: '/api/scraper/mediafire/resolve', remote: 'mediafire/resolve', category: 'Files', name: 'MediaFire resolve', cost: 1, desc: 'File name and direct link of a MediaFire page', params: [param('url', 'https://www.mediafire.com/file/abc/file.zip', 'Public page / video URL')], run: resolve }
+  { path: '/api/scraper/mediafire/resolve', noProbe: true, remote: 'mediafire/resolve', category: 'Files', name: 'MediaFire resolve', cost: 1, desc: 'File name and direct link of a MediaFire page', params: [param('url', 'https://www.mediafire.com/file/abc/file.zip', 'Public page / video URL')], run: resolve }
 ];

@@ -8,5 +8,5 @@ async function details(p) {
 }
 
 export default [
-  { path: '/api/scraper/instagram/details', remote: 'instagram/details', category: 'Social', name: 'Instagram details', cost: 1, desc: 'Public post metadata', params: [param('url', 'https://www.instagram.com/p/abc/', 'Public page / video URL')], run: details }
+  { path: '/api/scraper/instagram/details', remote: 'instagram/details', category: 'Social', name: 'Instagram details', cost: 1, desc: 'Public post metadata', params: [param('url', 'https://www.instagram.com/p/fA9uwTtkSN/', 'Public page / video URL')], run: details }
 ];

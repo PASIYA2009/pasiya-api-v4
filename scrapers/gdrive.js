@@ -56,5 +56,5 @@ async function resolve(p) {
 }
 
 export default [
-  { path: '/api/scraper/gdrive/resolve', remote: 'gdrive/resolve', category: 'Files', name: 'Google Drive resolve', cost: 1, desc: 'Direct download link of a public Drive file (Docs / Sheets / Slides export too)', params: [param('url', 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQr/view', 'Public page / video URL'), param('format', '', 'For Docs/Sheets/Slides: pdf, docx, xlsx, csv, pptx ...', false)], run: resolve }
+  { path: '/api/scraper/gdrive/resolve', noProbe: true, remote: 'gdrive/resolve', category: 'Files', name: 'Google Drive resolve', cost: 1, desc: 'Direct download link of a public Drive file (Docs / Sheets / Slides export too)', params: [param('url', 'https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQr/view', 'Public page / video URL'), param('format', '', 'For Docs/Sheets/Slides: pdf, docx, xlsx, csv, pptx ...', false)], run: resolve }
 ];

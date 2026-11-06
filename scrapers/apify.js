@@ -67,6 +67,15 @@ async function redditBackup(q, n) {
   if (!rows.length) return viaSearch([`site:reddit.com/r ${q}`, `${q} reddit`], /reddit\.com\/r\/[^/]+\/comments\//, /reddit\.com\/r\//, n);
   return rows.map((x) => ({ id: x.id, title: x.title, subreddit: 'r/' + x.subreddit, author: x.author, score: x.score, comments: x.num_comments, url: 'https://www.reddit.com' + x.permalink, link: x.url, text: (x.selftext || '').slice(0, 500), created: x.created_utc ? new Date(x.created_utc * 1000).toISOString() : null }));
 }
+
+// Fetch a page through public relay services (their IPs are not the blocked Vercel ones). Returns text or null.
+async function viaProxy(url) {
+  for (const u of [`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`, `https://r.jina.ai/${url}`]) {
+    try { const r = await fetchT(u, { headers: { 'User-Agent': UA, 'X-Return-Format': 'html' } }, 12000); if (r.ok) { const t = await r.text(); if (t && t.length > 20) return t; } } catch { /* next relay */ }
+  }
+  return null;
+}
+const jsonIn = (t) => { try { return JSON.parse(t.slice(t.indexOf('{'), t.lastIndexOf('}') + 1)); } catch { return null; } };
 async function ytSearch(p) {
   const q = need(p.q, 'q'), n = lim(p);
   let d; try { d = await yti('search', { query: q, params: 'EgIQAQ%3D%3D' }); } catch { d = null; }
@@ -107,6 +116,9 @@ async function redditSearch(p) {
       if (items.length) return items;
     } catch { /* try next host */ }
   }
+  const px = jsonIn((await viaProxy(`https://www.reddit.com/search.json?q=${enc}&limit=${n}&sort=relevance&raw_json=1`)) || '');
+  const pItems = (px?.data?.children || []).map((c) => c.data).filter(Boolean).map((x) => ({ id: x.id, title: x.title, subreddit: x.subreddit_name_prefixed, author: x.author, score: x.score, comments: x.num_comments, url: 'https://www.reddit.com' + x.permalink, link: x.url, text: (x.selftext || '').slice(0, 500), created: x.created_utc ? new Date(x.created_utc * 1000).toISOString() : null }));
+  if (pItems.length) return pItems;
   let r; try { r = await fetchT(`https://www.reddit.com/search.rss?q=${enc}&limit=${n}&sort=relevance`, { headers: { 'User-Agent': UA } }, 12000); } catch { r = { ok: false, status: 'no answer' }; }
   if (!r.ok) { const b = await redditBackup(q, n); if (b.length) return b; throw new HttpError(502, 'Reddit refused the request (HTTP ' + r.status + ').'); }
   const xml = await r.text();
@@ -170,6 +182,11 @@ async function xProfile(p) {
       tw = (d?.props?.pageProps?.timeline?.entries || []).filter((e) => e.type === 'tweet').map((e) => e.content?.tweet).filter(Boolean);
       if (tw.length) break;
     } catch { /* rate-limited (429) or blocked: try the next host */ }
+  }
+  if (!tw.length) {
+    const html = await viaProxy('https://syndication.twitter.com/srv/timeline-profile/screen-name/' + encodeURIComponent(h));
+    const d = html && jsonScript(html, /<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+    tw = (d?.props?.pageProps?.timeline?.entries || []).filter((e) => e.type === 'tweet').map((e) => e.content?.tweet).filter(Boolean);
   }
   if (!tw.length) {
     const found = await viaSearch([`site:x.com/${h}/status`, `site:twitter.com/${h}/status`, `${h} twitter tweets`], new RegExp('(?:x|twitter)\\.com/' + h.replace(/[^\w]/g, '') + '/status/\\d+', 'i'), null, lim(p));
@@ -256,7 +273,7 @@ export default [
   E('tiktok/profile', 'TikTok Profile', 'Profile info + latest videos of a TikTok user', 'clockworks~tiktok-scraper', [param('username', 'khaby.lame', 'TikTok username'), L], (p) => ({ profiles: [handle(p.username, 'username')], resultsPerPage: lim(p, 5), shouldDownloadVideos: false, shouldDownloadCovers: false }), 'tiktok'),
   E('tiktok/search', 'TikTok Search', 'Search TikTok videos by keyword', 'clockworks~tiktok-scraper', [param('q', 'sri lanka', 'Search text'), L], (p) => ({ searchQueries: [need(p.q, 'q')], resultsPerPage: lim(p), shouldDownloadVideos: false }), 'tiktok'),
   E('tiktok/hashtag', 'TikTok Hashtag', 'Top videos of a TikTok hashtag', 'clockworks~tiktok-scraper', [param('tag', 'srilanka', 'Hashtag (no #)'), L], (p) => ({ hashtags: [need(p.tag, 'tag', 60).replace(/^#/, '')], resultsPerPage: lim(p), shouldDownloadVideos: false }), 'tiktok'),
-  E('tiktok/comments', 'TikTok Comments', 'Comments of a public TikTok video', 'clockworks~tiktok-comments-scraper', [param('url', 'https://www.tiktok.com/@user/video/123', 'TikTok video link'), L], (p) => ({ postURLs: [safeUrl(p.url, ['tiktok.com'])], commentsPerPost: lim(p, 20) }), 'tiktok'),
+  E('tiktok/comments', 'TikTok Comments', 'Comments of a public TikTok video', 'clockworks~tiktok-comments-scraper', [param('url', 'https://www.tiktok.com/@scout2015/video/6718335390845095173', 'TikTok video link'), L], (p) => ({ postURLs: [safeUrl(p.url, ['tiktok.com'])], commentsPerPost: lim(p, 20) }), 'tiktok'),
   E('instagram/profile', 'Instagram Profile', 'Public profile info: bio, followers, posts count', 'apify~instagram-profile-scraper', [param('username', 'instagram', 'Instagram username')], (p) => ({ usernames: [handle(p.username, 'username')] }), 'instagram'),
   E('instagram/posts', 'Instagram Posts', 'Latest posts of a public Instagram user', 'apify~instagram-post-scraper', [param('username', 'natgeo', 'Instagram username'), L], (p) => ({ username: [handle(p.username, 'username')], resultsLimit: lim(p) }), 'instagram'),
   E('instagram/reels', 'Instagram Reels', 'Latest reels of a public Instagram user', 'apify~instagram-reel-scraper', [param('username', 'natgeo', 'Instagram username'), L], (p) => ({ username: [handle(p.username, 'username')], resultsLimit: lim(p) }), 'instagram'),

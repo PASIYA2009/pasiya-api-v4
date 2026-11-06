@@ -168,6 +168,6 @@ export default [
   { path: '/api/tools/tinyurl', category: 'Utility', name: 'TinyURL', cost: 0, isNew: true, desc: 'Shorten links with TinyURL', params: [param('url', 'https://example.com/a/very/long/link', 'Link to shorten')], run: tiny },
   { path: '/api/tools/webcheck', category: 'Utility', name: 'WebCheck', cost: 0, isNew: true, desc: 'Quick SEO & security-header audit of one public page', params: [param('url', 'https://example.com', 'Website address')], run: webcheck },
   { path: '/api/tempmail/random', category: 'Utility', name: 'Tempmail: Random', cost: 0, isNew: true, desc: 'Generate an instant disposable email address (Guerrilla Mail, with mail.tm / mail.gw as backup)', params: [], run: tmRandom },
-  { path: '/api/tempmail/mailbox', category: 'Utility', name: 'Tempmail: Mailbox', cost: 0, isNew: true, desc: 'List inbox messages of a temp mailbox', params: [ID], run: tmBox },
-  { path: '/api/tempmail/message', category: 'Utility', name: 'Tempmail: Message', cost: 0, isNew: true, desc: 'Read one temp email with full text/HTML body', params: [ID, param('mid', '', 'Message id from the mailbox list')], run: tmMsg }
+  { path: '/api/tempmail/mailbox', noProbe: true, category: 'Utility', name: 'Tempmail: Mailbox', cost: 0, isNew: true, desc: 'List inbox messages of a temp mailbox', params: [ID], run: tmBox },
+  { path: '/api/tempmail/message', noProbe: true, category: 'Utility', name: 'Tempmail: Message', cost: 0, isNew: true, desc: 'Read one temp email with full text/HTML body', params: [ID, param('mid', '', 'Message id from the mailbox list')], run: tmMsg }
 ];

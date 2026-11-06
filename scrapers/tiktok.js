@@ -14,5 +14,5 @@ async function details(p) {
 }
 
 export default [
-  { path: '/api/scraper/tiktok/details', remote: 'tiktok/details', category: 'Social', name: 'TikTok details', cost: 1, desc: 'Public video metadata', params: [param('url', 'https://www.tiktok.com/@user/video/123', 'Public page / video URL')], run: details }
+  { path: '/api/scraper/tiktok/details', remote: 'tiktok/details', category: 'Social', name: 'TikTok details', cost: 1, desc: 'Public video metadata', params: [param('url', 'https://www.tiktok.com/@scout2015/video/6718335390845095173', 'Public page / video URL')], run: details }
 ];

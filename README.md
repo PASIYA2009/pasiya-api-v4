@@ -37,6 +37,9 @@ Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 
 - **Removed (feeds were dead):** Tech (SL) TecRoom, Roar, TechKatha, Android Wedakarayo and News: Live @ SL.
 - **Social fallbacks:** when Reddit / X / Instagram / TikTok refuse the Vercel server (403 / 429), every Social API now falls back to a Bing / DuckDuckGo `site:` search (title + link + snippet of public posts) instead of failing.
+- **Real test links:** the example links in the API docs / health check are now real public ones (TikTok `@scout2015`, Instagram `/p/fA9uwTtkSN/`, Facebook video, Pinterest pin, X `jack/status/20`) instead of fake ids. APIs that need your own file link or mailbox id (MediaFire, Google Drive, Pixeldrain, Tempmail mailbox / message) show *Not tested* in the health check.
+- Reddit and X Profile also try public relay services (allorigins / r.jina.ai) when the server is blocked.
+- **Status:** two new cards, **RAM** (memory used out of the function's limit) and **CPU** (% used + cores + load) of the server instance answering the request. They refresh with the other status cards.
 
 ## v4.1
 - **Tempmail:** Guerrilla Mail is now tried first (mail.tm / mail.gw as backup). Same 3 endpoints, same `id` flow; an expired Guerrilla session is rebuilt automatically.

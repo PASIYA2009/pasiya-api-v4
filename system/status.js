@@ -1,4 +1,5 @@
 // Public live status for the dashboard cards (hosted on Vercel).
+import os from 'node:os';
 import { cached } from './util.js';
 import * as fs from './db.js';
 import { statsLast24h } from './gateway.js';
@@ -15,6 +16,23 @@ function dbHint(e) {
   if (/NOT_FOUND|does not exist|database.*not/i.test(m)) return 'Firestore database not created / wrong project id';
   if (/permission|PERMISSION_DENIED|forbidden/i.test(m)) return 'service account has no Firestore permission';
   return m.slice(0, 70) || 'unknown error';
+}
+
+// Server load of the function instance that answers this request (Vercel runs many small instances).
+// RAM = memory this instance uses (RSS) out of the memory limit Vercel gives the function (falls back to the machine total).
+// CPU = share of this instance's CPU time over the time since the previous status call (first call: a 200 ms sample).
+let cpuPrev = null, cpuLast = 0;
+async function serverLoad() {
+  const mb = (b) => Math.round(b / 1048576), cores = Math.max(1, os.cpus()?.length || 1);
+  if (!cpuPrev) { cpuPrev = { t: Date.now(), u: process.cpuUsage() }; await new Promise((r) => setTimeout(r, 200)); }
+  const now = Date.now(), u = process.cpuUsage(), wall = now - cpuPrev.t;
+  if (wall >= 200) {
+    const cpuMs = (u.user + u.system - cpuPrev.u.user - cpuPrev.u.system) / 1000;
+    cpuLast = Math.min(100, Math.round((cpuMs / (wall * cores)) * 1000) / 10);
+    if (wall >= 1000 || cpuPrev.first !== false) cpuPrev = { t: now, u, first: false };
+  }
+  const limit = Number(process.env.AWS_LAMBDA_FUNCTION_MEMORY_SIZE) || mb(os.totalmem()), used = mb(process.memoryUsage().rss);
+  return { ramUsedMb: used, ramTotalMb: limit, ramPct: Math.min(100, Math.round((used / limit) * 100)), cpuPct: cpuLast, cpuCores: cores, load1: Math.round((os.loadavg()?.[0] || 0) * 100) / 100 };
 }
 
 export async function status(req, env) {
@@ -43,6 +61,7 @@ export async function status(req, env) {
     categories: new Set(visible.map((c) => c.category)).size,
     users,
     requests24h: stats.requests, errors24h: stats.errors, avgResponseMs: stats.avgMs, successRate: stats.successRate,
+    server: await serverLoad(),
     time: new Date().toISOString()
   };
 }

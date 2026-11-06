@@ -8,5 +8,5 @@ async function details(p) {
 }
 
 export default [
-  { path: '/api/scraper/facebook/details', remote: 'facebook/details', category: 'Social', name: 'Facebook details', cost: 1, desc: 'Public post metadata', params: [param('url', 'https://www.facebook.com/watch/?v=123', 'Public page / video URL')], run: details }
+  { path: '/api/scraper/facebook/details', remote: 'facebook/details', category: 'Social', name: 'Facebook details', cost: 1, desc: 'Public post metadata', params: [param('url', 'https://www.facebook.com/watch/?v=10153231379946729', 'Public page / video URL')], run: details }
 ];
