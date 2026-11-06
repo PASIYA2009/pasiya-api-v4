@@ -63,7 +63,9 @@ async function ytCommentsBackup(id, n) {
 }
 async function redditBackup(q, n) {
   const d = await firstJson([`https://api.pullpush.io/reddit/search/submission/?q=${encodeURIComponent(q)}&size=${n}&sort_type=score&sort=desc`]);
-  return (d?.data || []).slice(0, n).map((x) => ({ id: x.id, title: x.title, subreddit: 'r/' + x.subreddit, author: x.author, score: x.score, comments: x.num_comments, url: 'https://www.reddit.com' + x.permalink, link: x.url, text: (x.selftext || '').slice(0, 500), created: x.created_utc ? new Date(x.created_utc * 1000).toISOString() : null }));
+  const rows = (d?.data || []).slice(0, n);
+  if (!rows.length) return viaSearch([`site:reddit.com/r ${q}`, `${q} reddit`], /reddit\.com\/r\/[^/]+\/comments\//, /reddit\.com\/r\//, n);
+  return rows.map((x) => ({ id: x.id, title: x.title, subreddit: 'r/' + x.subreddit, author: x.author, score: x.score, comments: x.num_comments, url: 'https://www.reddit.com' + x.permalink, link: x.url, text: (x.selftext || '').slice(0, 500), created: x.created_utc ? new Date(x.created_utc * 1000).toISOString() : null }));
 }
 async function ytSearch(p) {
   const q = need(p.q, 'q'), n = lim(p);
@@ -129,12 +131,18 @@ async function igUser(p) {
   if (r.status === 404) throw new HttpError(404, 'Instagram user not found.');
   return { _og: u };
 }
+async function igProfileViaSearch(u) {
+  const rows = await viaSearch([`site:instagram.com/${u}`, `${u} instagram`], new RegExp('instagram\\.com/' + u.replace(/[^\w.]/g, '') + '/?$', 'i'), new RegExp('instagram\\.com/' + u.replace(/[^\w.]/g, ''), 'i'), 3);
+  if (!rows.length) throw new HttpError(404, 'No public Instagram profile found (private, missing or blocked).');
+  const m = (rows[0].snippet + ' ' + rows[0].title).match(/([\d.,]+[KMkm]?) Followers?, ([\d.,]+[KMkm]?) Following, ([\d.,]+[KMkm]?) Posts?/);
+  return [{ username: u, title: rows[0].title, description: rows[0].snippet, followers: m?.[1] || null, following: m?.[2] || null, posts: m?.[3] || null, url: `https://www.instagram.com/${u}/`, source: 'search engine' }];
+}
 async function igProfile(p) {
   const x = await igUser(p);
   if (x._og) {
-    const html = await page(`https://www.instagram.com/${x._og}/`, { 'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' });
+    let html = ''; try { html = await page(`https://www.instagram.com/${x._og}/`, { 'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' }); } catch { /* use the search engine below */ }
     const title = meta(html, 'og:title'), desc = meta(html, 'og:description');
-    if (!title) throw new HttpError(404, 'No public Instagram profile found (private, missing or blocked).');
+    if (!title) return igProfileViaSearch(x._og);
     const m = (desc || '').match(/([\d.,KMkm]+) Followers?, ([\d.,KMkm]+) Following, ([\d.,KMkm]+) Posts?/);
     return [{ username: x._og, title, description: desc, followers: m?.[1] || null, following: m?.[2] || null, posts: m?.[3] || null, picture: meta(html, 'og:image'), url: `https://www.instagram.com/${x._og}/` }];
   }
@@ -142,17 +150,32 @@ async function igProfile(p) {
 }
 const igPosts = (videosOnly) => async (p) => {
   const x = await igUser(p);
-  if (x._og) throw new HttpError(502, 'Instagram does not show posts to this server right now. Try again later.');
+  if (x._og) {
+    const u = x._og.replace(/[^\w.]/g, '');
+    const rows = await viaSearch([`site:instagram.com/${u}/${videosOnly ? 'reel' : 'p'}`, `site:instagram.com/${u}`, `${u} instagram ${videosOnly ? 'reels' : 'posts'}`], videosOnly ? /instagram\.com\/(?:[^/]+\/)?(?:reel|reels)\//i : /instagram\.com\/(?:[^/]+\/)?(?:p|reel)\//i, null, lim(p));
+    if (!rows.length) throw new HttpError(404, 'No public posts found (private account, wrong name, or Instagram blocked this server).');
+    return rows;
+  }
   if (x.is_private) throw new HttpError(404, 'This Instagram account is private.');
   const nodes = (x.edge_owner_to_timeline_media?.edges || []).map((e) => e.node).filter((n) => !videosOnly || n.is_video);
   return nodes.slice(0, lim(p)).map((n) => ({ id: n.id, shortcode: n.shortcode, url: 'https://www.instagram.com/p/' + n.shortcode + '/', caption: n.edge_media_to_caption?.edges?.[0]?.node?.text || '', likes: n.edge_liked_by?.count ?? n.edge_media_preview_like?.count, comments: n.edge_media_to_comment?.count, isVideo: !!n.is_video, views: n.video_view_count ?? null, image: n.display_url, taken: n.taken_at_timestamp ? new Date(n.taken_at_timestamp * 1000).toISOString() : null }));
 };
 async function xProfile(p) {
   const h = handle(p.username, 'username');
-  const html = await page('https://syndication.twitter.com/srv/timeline-profile/screen-name/' + encodeURIComponent(h), { Referer: 'https://platform.twitter.com/' });
-  const d = jsonScript(html, /<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
-  const tw = (d?.props?.pageProps?.timeline?.entries || []).filter((e) => e.type === 'tweet').map((e) => e.content?.tweet).filter(Boolean);
-  if (!tw.length) throw new HttpError(404, 'No public tweets found (wrong name, protected account or X blocked this server).');
+  let tw = [];
+  for (const host of ['syndication.twitter.com', 'cdn.syndication.twimg.com']) {
+    try {
+      const html = await page(`https://${host}/srv/timeline-profile/screen-name/` + encodeURIComponent(h), { Referer: 'https://platform.twitter.com/' });
+      const d = jsonScript(html, /<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+      tw = (d?.props?.pageProps?.timeline?.entries || []).filter((e) => e.type === 'tweet').map((e) => e.content?.tweet).filter(Boolean);
+      if (tw.length) break;
+    } catch { /* rate-limited (429) or blocked: try the next host */ }
+  }
+  if (!tw.length) {
+    const found = await viaSearch([`site:x.com/${h}/status`, `site:twitter.com/${h}/status`, `${h} twitter tweets`], new RegExp('(?:x|twitter)\\.com/' + h.replace(/[^\w]/g, '') + '/status/\\d+', 'i'), null, lim(p));
+    if (found.length) return found;
+    throw new HttpError(404, 'No public tweets found (wrong name, protected account or X blocked this server).');
+  }
   return tw.slice(0, lim(p)).map((t) => ({ id: t.id_str, text: t.full_text || t.text, author: t.user?.screen_name, name: t.user?.name, likes: t.favorite_count, replies: t.reply_count, retweets: t.retweet_count, created: t.created_at, url: `https://x.com/${t.user?.screen_name || h}/status/${t.id_str}` }));
 }
 async function fbPage(p) { return [await ogDetails(safeUrl(p.url, ['facebook.com']), 'Facebook')]; }
@@ -169,7 +192,13 @@ async function tikwm(path, params, post = false) {
   }
 }
 const ttVideo = (v) => ({ id: v.video_id || v.id, title: v.title, author: v.author?.unique_id, nickname: v.author?.nickname, plays: v.play_count, likes: v.digg_count, comments: v.comment_count, shares: v.share_count, cover: v.cover, video: v.play, created: v.create_time ? new Date(v.create_time * 1000).toISOString() : null, url: v.author?.unique_id ? `https://www.tiktok.com/@${v.author.unique_id}/video/${v.video_id || v.id}` : null });
-async function tiktokSearch(p) { const d = await tikwm('feed/search', { keywords: need(p.q, 'q'), count: String(lim(p)), cursor: '0', HD: '1' }, true); return (d?.videos || []).slice(0, lim(p)).map(ttVideo); }
+async function tiktokSearch(p) {
+  const prm = { keywords: need(p.q, 'q'), count: String(lim(p)), cursor: '0', HD: '1' };
+  let d; try { d = await tikwm('feed/search', prm); } catch (e1) { try { d = await tikwm('feed/search', prm, true); } catch (e2) { d = null; } }
+  const v = (d?.videos || []).slice(0, lim(p)).map(ttVideo);
+  if (v.length) return v;
+  return viaSearch([`site:tiktok.com/@ ${prm.keywords}`, `${prm.keywords} tiktok video`], /tiktok\.com\/@[^/]+\/video\/\d+/, /tiktok\.com\//, lim(p));
+}
 async function tiktokHashtag(p) {
   const tag = need(p.tag, 'tag', 60).replace(/^#/, '');
   try {
@@ -185,13 +214,25 @@ async function tiktokComments(p) {
   return (d?.comments || []).slice(0, lim(p)).map((c) => ({ id: c.id, text: c.text, author: c.user?.unique_id, nickname: c.user?.nickname, likes: c.digg_count, replies: c.reply_total, created: c.create_time ? new Date(c.create_time * 1000).toISOString() : null }));
 }
 // ---- Search-engine based (Bing / DuckDuckGo, no key): public posts that the engines have indexed ----
-const viaSearch = async (query, keep, n) => {
-  const d = await webSearch({ q: query, limit: 20 }, {});
-  return d.results.filter((r) => keep.test(r.url)).slice(0, n).map((r) => ({ title: r.title, url: r.url, snippet: r.snippet }));
+const viaSearch = async (queries, strict, loose, n) => {
+  const seen = new Set(), out = [];
+  for (const q of [].concat(queries)) {
+    let d; try { d = await webSearch({ q, limit: 20 }, {}); } catch { continue; }
+    for (const r of d.results) { if (!seen.has(r.url) && (strict.test(r.url) || loose?.test(r.url))) { seen.add(r.url); out.push({ title: r.title, url: r.url, snippet: r.snippet, _strict: strict.test(r.url) }); } }
+    if (out.filter((x) => x._strict).length >= n) break;
+  }
+  return out.sort((x, y) => y._strict - x._strict).slice(0, n).map(({ _strict, ...x }) => x);
 };
-const xSearch = (p) => viaSearch(`(site:x.com OR site:twitter.com) inurl:status ${need(p.q, 'q', 100)}`, /(?:x|twitter)\.com\/[^/]+\/status\/\d+/, lim(p));
-const igHashtag = (p) => { const t = need(p.tag, 'tag', 60).replace(/^#/, ''); return viaSearch(`site:instagram.com "#${t}"`, /instagram\.com\/(?:p|reel|reels)\//, lim(p)); };
-const fbPosts = (p) => { const u = new URL(safeUrl(p.url, ['facebook.com'])), slug = u.pathname.split('/').filter(Boolean)[0] || ''; if (!slug) throw new HttpError(400, 'Give the page link, e.g. https://www.facebook.com/nasa'); return viaSearch(`site:facebook.com/${slug}`, new RegExp('facebook\\.com/' + slug.replace(/[^\w.-]/g, '') + '/(?:posts|videos|photos|reel)|permalink|story_fbid', 'i'), lim(p)); };
+const X_URL = /(?:x|twitter)\.com\/[^/?#]+\/status\/\d+/, X_ANY = /(?:^|\/\/)(?:www\.|mobile\.)?(?:x|twitter)\.com\//;
+const xSearch = (p) => { const q = need(p.q, 'q', 100); return viaSearch([`site:x.com ${q}`, `site:twitter.com ${q}`, `${q} twitter tweet`], X_URL, X_ANY, lim(p)); };
+const IG_URL = /instagram\.com\/(?:p|reel|reels)\//, IG_ANY = /instagram\.com\//;
+const igHashtag = (p) => { const t = need(p.tag, 'tag', 60).replace(/^#/, ''); return viaSearch([`site:instagram.com #${t}`, `site:instagram.com ${t}`, `#${t} instagram`], IG_URL, IG_ANY, lim(p)); };
+const fbPosts = (p) => {
+  const u = new URL(safeUrl(p.url, ['facebook.com'])), slug = u.pathname.split('/').filter(Boolean)[0] || '';
+  if (!slug) throw new HttpError(400, 'Give the page link, e.g. https://www.facebook.com/nasa');
+  const sl = slug.replace(/[^\w.-]/g, '');
+  return viaSearch([`site:facebook.com/${sl}`, `${sl} facebook page posts`], new RegExp('facebook\\.com/' + sl + '/(?:posts|videos|photos|reel)|permalink|story_fbid', 'i'), new RegExp('facebook\\.com/' + sl, 'i'), lim(p));
+};
 const FREE = { 'tiktok/search': tiktokSearch, 'tiktok/hashtag': tiktokHashtag, 'tiktok/comments': tiktokComments, 'twitter/search': xSearch, 'instagram/hashtag': igHashtag, 'facebook/posts': fbPosts,  'youtube/search': ytSearch, 'youtube/comments': ytComments, 'reddit/search': redditSearch, 'tiktok/profile': tiktokProfile, 'instagram/profile': igProfile, 'instagram/posts': igPosts(false), 'instagram/reels': igPosts(true), 'twitter/profile': xProfile, 'facebook/page': fbPage };
 // [path, name, desc, actor, params, build(p) -> input, platform]
 const E = (path, name, desc, actor, params, build, platform) => {

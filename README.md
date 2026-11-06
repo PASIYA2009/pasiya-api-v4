@@ -35,6 +35,9 @@ Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 - **Social APIs work with no key:** YouTube search + comments, Reddit search, TikTok profile, Instagram profile / posts / reels, X profile tweets and Facebook page now use free public data first (Apify is only a backup when `APIFY_TOKEN` is set). TikTok search / hashtag / comments now use the free tikwm.com public API, and X search, Instagram hashtag and Facebook posts use Bing / DuckDuckGo (`site:` search, public indexed posts only). Instagram Comments was removed (no free source exists). YouTube and Reddit also fall back to public Piped / Invidious / PullPush mirrors when blocked. Instagram / X / TikTok sometimes refuse datacenter IPs; the admin *Run health check* shows which ones work on your Vercel.
 - **Music:** the 5 built-in songs are removed. The default is now one song (`https://youtu.be/-LDyd-Cba0A`). **Admin Panel > Background music**: paste any YouTube link + *Add song*, or *Remove* a song. Saved in Firestore `settings/music`; public list at `GET /api/music`; visitors pick up changes within ~30 s.
 
+- **Removed (feeds were dead):** Tech (SL) TecRoom, Roar, TechKatha, Android Wedakarayo and News: Live @ SL.
+- **Social fallbacks:** when Reddit / X / Instagram / TikTok refuse the Vercel server (403 / 429), every Social API now falls back to a Bing / DuckDuckGo `site:` search (title + link + snippet of public posts) instead of failing.
+
 ## v4.1
 - **Tempmail:** Guerrilla Mail is now tried first (mail.tm / mail.gw as backup). Same 3 endpoints, same `id` flow; an expired Guerrilla session is rebuilt automatically.
 - **Switched-off APIs vanish for users:** the catalog is no longer cached, the server flag cache is 8 s, and the dashboard re-reads the API list every 30 s (and when the tab opens), so users no longer need to reload. A failed refresh keeps the current list.

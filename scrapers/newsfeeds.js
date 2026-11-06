@@ -22,12 +22,7 @@ const SITES = [
   ['siyatha', 'sl', 'Siyatha', 'Siyatha News LK', 'https://www.siyathanews.lk/feed/', 'siyathanews.lk'],
   ['nethnews', 'sl', 'Neth News', 'Neth News Sri Lanka', 'https://nethnews.lk/feed/', 'nethnews.lk'],
   ['newslk', 'sl', 'News.lk', 'Official Govt News Portal', 'https://www.news.lk/news?format=feed&type=rss', 'news.lk'],
-  ['liveatsrilanka', 'sl', 'Live @ SL', 'Live at Sri Lanka News', 'https://liveatsrilanka.com/feed/', 'liveatsrilanka.com'],
-  ['androidwedakarayo', 'techsl', 'Android Wedakarayo', 'Sinhala Tech News', 'https://androidwedakarayo.com/feed/', 'androidwedakarayo.com'],
-  ['techkatha', 'techsl', 'TechKatha', 'Sinhala Tech Community', 'https://techkatha.lk/feed/', 'techkatha.lk'],
-  ['roar_tech', 'techsl', 'Roar', 'Roar Tech Sinhala', 'https://roar.media/sinhala/feed', 'roar.media/sinhala'],
   ['technews_lk', 'techsl', 'Technews.lk', 'Latest LK Tech News', 'https://technews.lk/feed/', 'technews.lk'],
-  ['tecroom', 'techsl', 'TecRoom', 'TecRoom Updates', 'https://tecroom.lk/feed/', 'tecroom.lk'],
   ['nhk', 'world', 'NHK World', 'NHK News Japan', 'https://www3.nhk.or.jp/rss/news/cat0.xml', 'nhk.or.jp'],
   ['japantoday', 'world', 'Japan Today', 'Japan Today Feed', 'https://japantoday.com/feed', 'japantoday.com'],
   ['japantimes', 'world', 'Japan Times', 'Japan Times World', 'https://www.japantimes.co.jp/feed/', 'japantimes.co.jp'],
@@ -45,7 +40,7 @@ const SITES = [
 ];
 const PREFIX = { sl: 'News', world: 'News', tech: 'Tech', techsl: 'Tech (SL)' };
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
-const SI_SITES = new Set(['adaderana', 'lankadeepa', 'dinamina', 'mawbima', 'divaina', 'silumina', 'siyatha', 'nethnews', 'androidwedakarayo', 'techkatha', 'roar_tech', 'bbc', 'gossiplankanews', 'itnnews']);
+const SI_SITES = new Set(['adaderana', 'lankadeepa', 'dinamina', 'mawbima', 'divaina', 'silumina', 'siyatha', 'nethnews', 'bbc', 'gossiplankanews', 'itnnews']);
 
 // Google News (Sinhala + English editions, 7 days) and Bing News (RSS). Bing wraps links, so the real address is unwrapped.
 const GNX = (site, si) => `https://news.google.com/rss/search?q=${encodeURIComponent('site:' + site + ' when:7d')}&hl=${si ? 'si' : 'en-LK'}&gl=LK&ceid=LK:${si ? 'si' : 'en'}`;
