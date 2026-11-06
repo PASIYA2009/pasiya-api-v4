@@ -63,6 +63,11 @@ globalThis.fetch = async (input, init = {}) => {
   if (url.includes('search.f-droid.org')) return new Response('<a class="package-header" href="https://f-droid.org/en/packages/org.videolan.vlc/"><img class="package-icon" src="https://i/vlc.png"><h4 class="package-name">VLC</h4><span class="package-summary">Media player</span></a>');
   if (url.includes('f-droid.org/api/v1/packages/')) return j({ packageName: 'org.videolan.vlc', suggestedVersionCode: 13, packages: [{ versionName: '3.5', versionCode: 13 }, { versionName: '3.4', versionCode: 12 }] });
   if (url.includes('archive.org/advancedsearch')) return j({ response: { docs: [{ identifier: 'song1', title: 'Folk song', creator: 'Anon', downloads: 5 }] } });
+  if (url.includes('tikwm.com/api/feed/search')) return j({ code: 0, data: { videos: [{ video_id: '77', title: 'sl vid', author: { unique_id: 'u1', nickname: 'U' }, play_count: 9, digg_count: 3, play: 'https://cdn/v.mp4' }] } });
+  if (url.includes('tikwm.com/api/challenge/search')) return j({ code: 0, data: { challenge_list: [{ id: 'c9' }] } });
+  if (url.includes('tikwm.com/api/challenge/posts')) return j({ code: 0, data: { videos: [{ video_id: '88', title: 'tag vid', author: { unique_id: 'u2' } }] } });
+  if (url.includes('tikwm.com/api/comment/list')) return j({ code: 0, data: { comments: [{ id: 'k1', text: 'nice', user: { unique_id: 'fan' }, digg_count: 2 }] } });
+  if (url.includes('bing.com/search') && url.includes('site%3A')) return new Response('<rss><channel><item><title>Tweet by nasa</title><link>https://x.com/nasa/status/123</link><description>moon</description></item><item><title>other</title><link>https://example.com/a</link><description>x</description></item><item><title>IG post</title><link>https://www.instagram.com/p/AAA/</link><description>tag</description></item><item><title>FB post</title><link>https://www.facebook.com/nasa/posts/55</link><description>fb</description></item></channel></rss>');
   if (url.includes('tikwm.com/api/user/info')) return j(url.includes('someone') ? { code: 0, data: { user: { uniqueId: 'someone', nickname: 'S', avatarLarger: 'https://cdn/av.jpg' }, stats: { followerCount: 7 } } } : { code: -1 });
   if (url.includes('commons.wikimedia.org') && url.includes('filetype%3Avideo')) return j({ query: { pages: { 1: { index: 1, title: 'File:Fall.webm', imageinfo: [{ url: 'https://c/v.webm', mime: 'video/webm', width: 1920, height: 1080, descriptionurl: 'https://c/p' }] } } } });
   if (url === 'https://site.test/') return new Response('<html><head><link rel="stylesheet" href="/style.css"><link rel="x" href="https://other.test/x.css"></head><body><img src="/logo.png"><a href="/about">About</a></body></html>', { headers: { 'content-type': 'text/html' } });
@@ -98,6 +103,11 @@ globalThis.fetch = async (input, init = {}) => {
   if (url.includes('generativelanguage')) return j({ candidates: [{ content: { parts: [{ text: 'Hello from Gemini' }] } }] });
   if (url.includes('openrouter.ai')) return j({ error: { message: 'rate limited' } }, 429);
   if (url.includes('themoviedb')) return j(url.includes('/search/') ? { total_results: 1, page: 1, results: [{ id: 27205, title: 'Inception', release_date: '2010-07-15', vote_average: 8.37, poster_path: '/p.jpg' }] } : { id: 27205, title: 'Inception', genres: [{ name: 'Sci-Fi' }], credits: { cast: [{ name: 'Leo' }], crew: [{ job: 'Director', name: 'Nolan' }] }, videos: { results: [{ site: 'YouTube', type: 'Trailer', key: 'abc' }] } });
+  if (url.includes('youtube.com/youtubei/v1/search')) return j({ contents: [{ videoRenderer: { videoId: 'abcdefghijk', title: { runs: [{ text: 'Sinhala Song' }] }, ownerText: { runs: [{ text: 'Chan' }] }, viewCountText: { simpleText: '5 views' }, lengthText: { simpleText: '3:10' }, thumbnail: { thumbnails: [{ url: 'https://i/y.jpg' }] } } }] });
+  if (url.includes('reddit.com/search.json')) return j({ data: { children: [{ data: { id: 'r1', title: 'Colombo thread', subreddit_name_prefixed: 'r/srilanka', author: 'bob', score: 9, num_comments: 2, permalink: '/r/srilanka/comments/r1/x/', url: 'https://x', selftext: 'hi', created_utc: 1700000000 } }] } });
+  if (url.includes('tiktok.com/@khaby')) return new Response('<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__" type="application/json">' + JSON.stringify({ __DEFAULT_SCOPE__: { 'webapp.user-detail': { userInfo: { user: { id: '1', uniqueId: 'khaby.lame', nickname: 'Khaby', signature: 'hi', verified: true }, stats: { followerCount: 100, followingCount: 2, heartCount: 5, videoCount: 7 } } } } }) + '</script>');
+  if (url.includes('instagram.com/api/v1/users/web_profile_info')) return j({ data: { user: { id: '9', username: 'natgeo', full_name: 'NG', biography: 'bio', edge_followed_by: { count: 50 }, edge_follow: { count: 1 }, is_private: false, edge_owner_to_timeline_media: { count: 2, edges: [{ node: { id: 'p1', shortcode: 'AAA', is_video: false, display_url: 'https://i/1.jpg', edge_media_to_caption: { edges: [{ node: { text: 'cap' } }] }, edge_liked_by: { count: 3 } } }, { node: { id: 'p2', shortcode: 'BBB', is_video: true, display_url: 'https://i/2.jpg' } }] } } } });
+  if (url.includes('syndication.twitter.com')) return new Response('<script id="__NEXT_DATA__" type="application/json">' + JSON.stringify({ props: { pageProps: { timeline: { entries: [{ type: 'tweet', content: { tweet: { id_str: '11', full_text: 'hello world', favorite_count: 4, user: { screen_name: 'nasa', name: 'NASA' } } } }] } } } }) + '</script>');
   if (url.includes('youtube.com/results')) return new Response(`<html><script>var ytInitialData = ${JSON.stringify({ contents: { a: [{ videoRenderer: { videoId: 'abc123', title: { runs: [{ text: 'Sinhala "song" {x}' }] }, lengthText: { simpleText: '3:25' }, ownerText: { runs: [{ text: 'Chan' }] }, viewCountText: { simpleText: '1,234 views' }, thumbnail: { thumbnails: [{ url: 'https://i/y.jpg' }] } } }, { videoRenderer: { videoId: 'def456', title: { runs: [{ text: 'Two' }] } } }] } })};</script></html>`);
   if (url.includes('youtube.com/oembed')) return url.includes('missing') ? j({}, 404) : j({ title: 'Never Gonna', author_name: 'Rick', author_url: 'https://yt/rick', thumbnail_url: 'https://i/t.jpg' });
   if (url.includes('youtube.com/watch')) return new Response('<script>var ytInitialPlayerResponse = {"videoDetails":{"videoId":"dQw","lengthSeconds":"212","viewCount":"99","shortDescription":"desc { }"}};</script>');
@@ -184,10 +194,10 @@ r = await call('/api/usage', auth, user2); ok('usage logged', r.b.items.length =
 for (let i = 0; i < 12; i++) await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`, {}, user2);
 r = await call(`/api/ai/gemini?apikey=${KEY}&prompt=hi`, {}, user2); ok('out of coins -> 402', r.s === 402, r);
 
-r = await call('/api/status', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-vercel-id': 'sin1::abc' } }); ok('status shape', r.b.status === 'Online' && r.b.database.ok && r.b.requests24h > 5 && r.b.endpoints === 110 && r.b.categories === 10, r.b);
-r = await call('/api/catalog'); ok('catalog lists the public APIs', r.b.apis.length === 110, r.b.apis.length);
-r = await call('/api/catalog', {}, { ...env, SCRAPER_URL: 'https://s' }); ok('catalog same w/ SCRAPER_URL', r.b.apis.length === 110, r.b.apis.length);
-r = await call('/api/catalog', {}, { ...env, APIFY_TOKEN: 'x', TAVILY_API_KEY: 'x' }); ok('social (Apify) + Tavily APIs appear only when their key is set', r.b.apis.length === 110 + 16 + 1 && r.b.apis.some((a) => a.path === '/api/social/tiktok/profile'), r.b.apis.length);
+r = await call('/api/status', { headers: { 'x-forwarded-for': '1.2.3.4', 'x-vercel-id': 'sin1::abc' } }); ok('status shape', r.b.status === 'Online' && r.b.database.ok && r.b.requests24h > 5 && r.b.endpoints === 125 && r.b.categories === 10, r.b);
+r = await call('/api/catalog'); ok('catalog lists the public APIs', r.b.apis.length === 125, r.b.apis.length);
+r = await call('/api/catalog', {}, { ...env, SCRAPER_URL: 'https://s' }); ok('catalog same w/ SCRAPER_URL', r.b.apis.length === 125, r.b.apis.length);
+r = await call('/api/catalog', {}, { ...env, APIFY_TOKEN: 'x', TAVILY_API_KEY: 'x' }); ok('social (Apify) + Tavily APIs appear only when their key is set', r.b.apis.length === 125 + 1 + 1 && r.b.apis.some((a) => a.path === '/api/social/tiktok/profile'), r.b.apis.length);
 r = await call('/api/daily-claim', { method: 'POST', ...auth }, user2); ok('daily claim', r.s === 200, r);
 r = await call('/api/daily-claim', { method: 'POST', ...auth }, user2); ok('daily claim twice 409', r.s === 409, r);
 r = await call('/api/spin', { method: 'POST', ...auth }, user2); ok('spin awards coins', r.s === 200 && [10,25,50,100,250].includes(r.b.reward) && r.b.index >= 0 && r.b.index < 5, r);
@@ -334,6 +344,21 @@ r = await call('/api/config'); ok('config', r.b.signupCoins === 10 && r.b.adminC
 // ---- v3.8: HD downloader, QR, IP, watermark gate, admin switches, health check, removed APIs -------------------
 {
   const G = (path, e = fast) => call(path + (path.includes('?') ? '&' : '?') + 'apikey=' + KEY, {}, e);
+  // v4.2: social APIs work without any key
+  r = await G('/api/social/youtube/search?q=sinhala'); ok('social: youtube search (keyless)', r.s === 200 && r.b.result.items[0].id === 'abcdefghijk' && r.b.result.items[0].channel === 'Chan', r);
+  r = await G('/api/social/reddit/search?q=colombo'); ok('social: reddit search (keyless)', r.s === 200 && r.b.result.items[0].subreddit === 'r/srilanka', r);
+  r = await G('/api/social/tiktok/profile?username=khaby.lame'); ok('social: tiktok profile (keyless)', r.s === 200 && r.b.result.items[0].followers === 100, r);
+  r = await G('/api/social/instagram/profile?username=natgeo'); ok('social: instagram profile (keyless)', r.s === 200 && r.b.result.items[0].followers === 50, r);
+  r = await G('/api/social/instagram/posts?username=natgeo'); ok('social: instagram posts (keyless)', r.s === 200 && r.b.result.count === 2, r);
+  r = await G('/api/social/instagram/reels?username=natgeo'); ok('social: instagram reels = videos only', r.s === 200 && r.b.result.count === 1 && r.b.result.items[0].shortcode === 'BBB', r);
+  r = await G('/api/social/twitter/profile?username=nasa'); ok('social: x profile tweets (keyless)', r.s === 200 && r.b.result.items[0].text === 'hello world', r);
+  r = await G('/api/social/tiktok/search?q=sri+lanka'); ok('social: tiktok search (keyless)', r.s === 200 && r.b.result.items[0].author === 'u1', r);
+  r = await G('/api/social/tiktok/hashtag?tag=srilanka'); ok('social: tiktok hashtag (keyless)', r.s === 200 && r.b.result.items[0].id === '88', r);
+  r = await G('/api/social/tiktok/comments?url=' + encodeURIComponent('https://www.tiktok.com/@u/video/1')); ok('social: tiktok comments (keyless)', r.s === 200 && r.b.result.items[0].text === 'nice', r);
+  r = await G('/api/social/twitter/search?q=moon'); ok('social: x search via search engine', r.s === 200 && r.b.result.count === 1 && r.b.result.items[0].url.includes('/status/123'), r);
+  r = await G('/api/social/instagram/hashtag?tag=moon'); ok('social: instagram hashtag via search engine', r.s === 200 && r.b.result.items[0].url.includes('/p/AAA'), r);
+  r = await G('/api/social/facebook/posts?url=' + encodeURIComponent('https://www.facebook.com/nasa')); ok('social: facebook posts via search engine', r.s === 200 && r.b.result.items[0].url.includes('/posts/55'), r);
+  r = await G('/api/social/reddit/search'); ok('social: missing input = 400', r.s === 400, r);
   r = await call('/api/catalog'); ok('thenux-ai + twitter_v2 removed from the catalog', !r.b.apis.some((a) => /thenux|twitter_v2/.test(a.path)), r.b.apis.length);
   r = await G('/api/thenux-ai?prompt=hi'); ok('thenux-ai route is gone (404)', r.s === 404, r);
   r = await G('/api/video/hd?url=' + encodeURIComponent('https://youtu.be/dQw4w9WgXcQ')); ok('hd needs rightsConfirmed', r.s === 400, r);

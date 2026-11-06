@@ -32,6 +32,7 @@ Tests: `node test/run.mjs` (offline, mocked sites, no install needed).
 - `maxDuration` is 30s in `vercel.json` (Hobby allows up to 60).
 
 ## v4.2
+- **Social APIs work with no key:** YouTube search + comments, Reddit search, TikTok profile, Instagram profile / posts / reels, X profile tweets and Facebook page now use free public data first (Apify is only a backup when `APIFY_TOKEN` is set). TikTok search / hashtag / comments now use the free tikwm.com public API, and X search, Instagram hashtag and Facebook posts use Bing / DuckDuckGo (`site:` search, public indexed posts only). Only Instagram Comments has no free source: it needs `APIFY_TOKEN` and stays hidden without it. Instagram / X / TikTok sometimes refuse datacenter IPs; the admin *Run health check* shows which ones work on your Vercel.
 - **Music:** the 5 built-in songs are removed. The default is now one song (`https://youtu.be/-LDyd-Cba0A`). **Admin Panel > Background music**: paste any YouTube link + *Add song*, or *Remove* a song. Saved in Firestore `settings/music`; public list at `GET /api/music`; visitors pick up changes within ~30 s.
 
 ## v4.1

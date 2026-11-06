@@ -85,6 +85,8 @@ async function web(p, env = {}) {
   throw new HttpError(502, 'Web search is not answering right now (' + errs.join('; ') + '). Add a free BRAVE_API_KEY for a stable engine.');
 }
 
+export { web as webSearch };
+
 // ---- Sri Lankan past papers (paperhub.lk, WordPress search) ----
 async function paperhub(p) {
   const q = need(p), limit = clamp(p.limit, 1, 30, 10);

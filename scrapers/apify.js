@@ -1,8 +1,10 @@
 // Social media data through Apify "actors" (the scraper catalogue listed in https://github.com/kawsarlog/social-media-apis).
 // Needs ONE free key: APIFY_TOKEN (https://console.apify.com/account/integrations, free plan = monthly credits).
-// Endpoints only appear once APIFY_TOKEN is set. They are never health-probed (every call spends Apify credits).
-import { HttpError, fetchT, cached, clamp, param } from '../system/util.js';
-import { safeUrl } from './_web.js';
+// v4.2: the endpoints that have a free, keyless way (see FREE below) work WITHOUT any key and use Apify only as a backup when APIFY_TOKEN is set.
+// Only Instagram Comments has no free source: it needs APIFY_TOKEN and stays hidden until it is set.
+import { HttpError, fetchT, cached, clamp, param, decodeEntities, stripHtml } from '../system/util.js';
+import { safeUrl, page, meta, ogDetails, UA } from './_web.js';
+import { webSearch } from './search.js';
 
 const need = (v, name, max = 150) => { const x = String(v ?? '').trim(); if (!x || x.length > max) throw new HttpError(400, `${name} is required (max ${max} characters).`); return x; };
 const handle = (v, name) => need(v, name, 100).replace(/^https?:\/\/[^/]+\//i, '').replace(/^@/, '').replace(/[/?#].*$/, '');
@@ -23,11 +25,161 @@ async function runActor(actor, input, env, ttl = 600) {
     return items;
   });
 }
+
+// ---------------- free (no key) implementations, tried first ----------------
+function* walk(o) { if (o && typeof o === 'object') { yield o; for (const v of Object.values(o)) yield* walk(v); } }
+const findAll = (o, key) => { const out = []; for (const x of walk(o)) if (x[key] && typeof x[key] === 'object') out.push(x[key]); return out; };
+const txt = (t) => (t?.simpleText ?? (t?.runs || []).map((r) => r.text).join('')) || '';
+const jsonScript = (html, re) => { const m = html.match(re); if (!m) return null; try { return JSON.parse(m[1]); } catch { return null; } };
+
+async function yti(endpoint, body) {
+  const r = await fetchT(`https://www.youtube.com/youtubei/v1/${endpoint}?prettyPrint=false`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'User-Agent': UA, Origin: 'https://www.youtube.com', Cookie: 'CONSENT=YES+1; SOCS=CAI' },
+    body: JSON.stringify({ context: { client: { clientName: 'WEB', clientVersion: '2.20260101.00.00', hl: 'en', gl: 'LK' } }, ...body })
+  }, 15000);
+  if (!r.ok) throw new HttpError(502, 'YouTube answered HTTP ' + r.status);
+  return r.json();
+}
+async function ytSearch(p) {
+  const q = need(p.q, 'q'), n = lim(p);
+  let d; try { d = await yti('search', { query: q, params: 'EgIQAQ%3D%3D' }); } catch { d = null; }
+  if (!d) { const html = await page('https://www.youtube.com/results?search_query=' + encodeURIComponent(q) + '&sp=EgIQAQ%253D%253D'); d = jsonScript(html, /var ytInitialData = (\{.*?\});<\/script>/s); }
+  return findAll(d, 'videoRenderer').filter((v) => v.videoId).slice(0, n).map((v) => ({
+    id: v.videoId, title: txt(v.title), url: 'https://www.youtube.com/watch?v=' + v.videoId, channel: txt(v.ownerText), views: txt(v.viewCountText), duration: txt(v.lengthText),
+    published: txt(v.publishedTimeText), description: txt(v.detailedMetadataSnippets?.[0]?.snippetText) || txt(v.descriptionSnippet), thumbnail: v.thumbnail?.thumbnails?.at(-1)?.url || null
+  }));
+}
+async function ytComments(p) {
+  const url = safeUrl(p.url, ['youtube.com', 'youtu.be']), n = lim(p);
+  const id = (url.match(/youtu\.be\/([\w-]{11})/) || url.match(/[?&]v=([\w-]{11})/) || url.match(/\/(?:shorts|live|embed)\/([\w-]{11})/) || [])[1];
+  if (!id) throw new HttpError(400, 'Not a YouTube video link.');
+  const first = await yti('next', { videoId: id });
+  const sec = findAll(first, 'itemSectionRenderer').find((x) => x.sectionIdentifier === 'comment-item-section');
+  const token = sec && findAll(sec, 'continuationCommand')[0]?.token;
+  if (!token) throw new HttpError(404, 'Comments are turned off or not available for this video.');
+  const d = await yti('next', { continuation: token });
+  const ent = new Map(); for (const m of d.frameworkUpdates?.entityBatchUpdate?.mutations || []) { const c = m.payload?.commentEntityPayload; if (c) ent.set(c.key, c); }
+  const out = [];
+  for (const th of findAll(d, 'commentThreadRenderer')) {
+    const key = th.commentViewModel?.commentViewModel?.commentKey, e = key && ent.get(key), old = th.comment?.commentRenderer;
+    if (e) out.push({ author: e.author?.displayName || '', text: e.properties?.content?.content || '', likes: e.toolbar?.likeCountNotliked || '0', published: e.properties?.publishedTime || '' });
+    else if (old) out.push({ author: txt(old.authorText), text: txt(old.contentText), likes: txt(old.voteCount) || '0', published: txt(old.publishedTimeText) });
+    if (out.length >= n) break;
+  }
+  return out;
+}
+async function redditSearch(p) {
+  const q = need(p.q, 'q'), n = lim(p), enc = encodeURIComponent(q);
+  for (const host of ['www.reddit.com', 'old.reddit.com']) {
+    try {
+      const r = await fetchT(`https://${host}/search.json?q=${enc}&limit=${n}&sort=relevance&raw_json=1`, { headers: { 'User-Agent': UA, Accept: 'application/json' } }, 12000);
+      if (!r.ok) continue;
+      const items = ((await r.json())?.data?.children || []).map((c) => c.data).filter(Boolean).map((x) => ({ id: x.id, title: x.title, subreddit: x.subreddit_name_prefixed, author: x.author, score: x.score, comments: x.num_comments, url: 'https://www.reddit.com' + x.permalink, link: x.url, text: (x.selftext || '').slice(0, 500), created: x.created_utc ? new Date(x.created_utc * 1000).toISOString() : null }));
+      if (items.length) return items;
+    } catch { /* try next host */ }
+  }
+  const r = await fetchT(`https://www.reddit.com/search.rss?q=${enc}&limit=${n}&sort=relevance`, { headers: { 'User-Agent': UA } }, 12000);
+  if (!r.ok) throw new HttpError(502, 'Reddit refused the request (HTTP ' + r.status + ').');
+  const xml = await r.text();
+  return [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].slice(0, n).map((m) => { const e = m[1], g = (re) => (e.match(re) || [])[1] || '';
+    return { title: decodeEntities(g(/<title>([\s\S]*?)<\/title>/)), author: g(/<name>\/u\/([^<]*)<\/name>/), subreddit: g(/<category[^>]*label="([^"]*)"/), url: g(/<link[^>]*href="([^"]*)"/), text: stripHtml(decodeEntities(g(/<content[^>]*>([\s\S]*?)<\/content>/))).slice(0, 500), created: g(/<updated>([^<]*)<\/updated>/) }; });
+}
+async function tiktokProfile(p) {
+  const u = handle(p.username, 'username');
+  const html = await page('https://www.tiktok.com/@' + encodeURIComponent(u), { Referer: 'https://www.tiktok.com/' });
+  const d = jsonScript(html, /<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)<\/script>/s)?.__DEFAULT_SCOPE__?.['webapp.user-detail'];
+  if (!d?.userInfo?.user) throw new HttpError(404, 'TikTok user not found (or TikTok blocked this server).');
+  const { user, stats } = d.userInfo;
+  return [{ id: user.id, username: user.uniqueId, nickname: user.nickname, bio: user.signature, verified: !!user.verified, private: !!user.privateAccount, avatar: user.avatarLarger || user.avatarMedium, followers: stats?.followerCount, following: stats?.followingCount, likes: stats?.heartCount, videos: stats?.videoCount, url: 'https://www.tiktok.com/@' + user.uniqueId }];
+}
+async function igUser(p) {
+  const u = handle(p.username, 'username');
+  const r = await fetchT('https://www.instagram.com/api/v1/users/web_profile_info/?username=' + encodeURIComponent(u), { headers: { 'User-Agent': UA, 'x-ig-app-id': '936619743392459', Accept: '*/*', Referer: 'https://www.instagram.com/' } }, 12000);
+  const d = r.ok ? await r.json().catch(() => null) : null;
+  if (d?.data?.user) return d.data.user;
+  if (r.status === 404) throw new HttpError(404, 'Instagram user not found.');
+  return { _og: u };
+}
+async function igProfile(p) {
+  const x = await igUser(p);
+  if (x._og) {
+    const html = await page(`https://www.instagram.com/${x._og}/`, { 'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' });
+    const title = meta(html, 'og:title'), desc = meta(html, 'og:description');
+    if (!title) throw new HttpError(404, 'No public Instagram profile found (private, missing or blocked).');
+    const m = (desc || '').match(/([\d.,KMkm]+) Followers?, ([\d.,KMkm]+) Following, ([\d.,KMkm]+) Posts?/);
+    return [{ username: x._og, title, description: desc, followers: m?.[1] || null, following: m?.[2] || null, posts: m?.[3] || null, picture: meta(html, 'og:image'), url: `https://www.instagram.com/${x._og}/` }];
+  }
+  return [{ id: x.id, username: x.username, fullName: x.full_name, bio: x.biography, verified: !!x.is_verified, private: !!x.is_private, followers: x.edge_followed_by?.count, following: x.edge_follow?.count, posts: x.edge_owner_to_timeline_media?.count, picture: x.profile_pic_url_hd || x.profile_pic_url, website: x.external_url || null, url: 'https://www.instagram.com/' + x.username + '/' }];
+}
+const igPosts = (videosOnly) => async (p) => {
+  const x = await igUser(p);
+  if (x._og) throw new HttpError(502, 'Instagram does not show posts to this server right now. Try again later.');
+  if (x.is_private) throw new HttpError(404, 'This Instagram account is private.');
+  const nodes = (x.edge_owner_to_timeline_media?.edges || []).map((e) => e.node).filter((n) => !videosOnly || n.is_video);
+  return nodes.slice(0, lim(p)).map((n) => ({ id: n.id, shortcode: n.shortcode, url: 'https://www.instagram.com/p/' + n.shortcode + '/', caption: n.edge_media_to_caption?.edges?.[0]?.node?.text || '', likes: n.edge_liked_by?.count ?? n.edge_media_preview_like?.count, comments: n.edge_media_to_comment?.count, isVideo: !!n.is_video, views: n.video_view_count ?? null, image: n.display_url, taken: n.taken_at_timestamp ? new Date(n.taken_at_timestamp * 1000).toISOString() : null }));
+};
+async function xProfile(p) {
+  const h = handle(p.username, 'username');
+  const html = await page('https://syndication.twitter.com/srv/timeline-profile/screen-name/' + encodeURIComponent(h), { Referer: 'https://platform.twitter.com/' });
+  const d = jsonScript(html, /<script id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+  const tw = (d?.props?.pageProps?.timeline?.entries || []).filter((e) => e.type === 'tweet').map((e) => e.content?.tweet).filter(Boolean);
+  if (!tw.length) throw new HttpError(404, 'No public tweets found (wrong name, protected account or X blocked this server).');
+  return tw.slice(0, lim(p)).map((t) => ({ id: t.id_str, text: t.full_text || t.text, author: t.user?.screen_name, name: t.user?.name, likes: t.favorite_count, replies: t.reply_count, retweets: t.retweet_count, created: t.created_at, url: `https://x.com/${t.user?.screen_name || h}/status/${t.id_str}` }));
+}
+async function fbPage(p) { return [await ogDetails(safeUrl(p.url, ['facebook.com']), 'Facebook')]; }
+
+// ---- TikTok through the free tikwm.com public API (no key; it allows ~1 request per second, so one retry) ----
+async function tikwm(path, params, post = false) {
+  for (let i = 0; i < 2; i++) {
+    const qs = new URLSearchParams(params);
+    const r = await fetchT('https://www.tikwm.com/api/' + path + (post ? '' : '?' + qs), post ? { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': UA }, body: qs } : { headers: { 'User-Agent': UA } }, 15000);
+    const d = await r.json().catch(() => null);
+    if (d?.code === 0) return d.data;
+    if (i === 0 && /limit/i.test(d?.msg || '')) { await new Promise((ok) => setTimeout(ok, 1300)); continue; }
+    throw new HttpError(502, 'TikTok lookup service: ' + (d?.msg || 'HTTP ' + r.status));
+  }
+}
+const ttVideo = (v) => ({ id: v.video_id || v.id, title: v.title, author: v.author?.unique_id, nickname: v.author?.nickname, plays: v.play_count, likes: v.digg_count, comments: v.comment_count, shares: v.share_count, cover: v.cover, video: v.play, created: v.create_time ? new Date(v.create_time * 1000).toISOString() : null, url: v.author?.unique_id ? `https://www.tiktok.com/@${v.author.unique_id}/video/${v.video_id || v.id}` : null });
+async function tiktokSearch(p) { const d = await tikwm('feed/search', { keywords: need(p.q, 'q'), count: String(lim(p)), cursor: '0', HD: '1' }, true); return (d?.videos || []).slice(0, lim(p)).map(ttVideo); }
+async function tiktokHashtag(p) {
+  const tag = need(p.tag, 'tag', 60).replace(/^#/, '');
+  try {
+    const c = await tikwm('challenge/search', { keywords: tag, count: '1', cursor: '0' });
+    const id = c?.challenge_list?.[0]?.id || c?.challenge_list?.[0]?.cid;
+    if (id) { const d = await tikwm('challenge/posts', { challenge_id: id, count: String(lim(p)), cursor: '0' }); const v = (d?.videos || []).slice(0, lim(p)).map(ttVideo); if (v.length) return v; }
+  } catch { /* fall back to a plain #tag search */ }
+  const d = await tikwm('feed/search', { keywords: '#' + tag, count: String(lim(p)), cursor: '0', HD: '1' }, true);
+  return (d?.videos || []).slice(0, lim(p)).map(ttVideo);
+}
+async function tiktokComments(p) {
+  const d = await tikwm('comment/list/', { url: safeUrl(p.url, ['tiktok.com']), count: String(lim(p)), cursor: '0' });
+  return (d?.comments || []).slice(0, lim(p)).map((c) => ({ id: c.id, text: c.text, author: c.user?.unique_id, nickname: c.user?.nickname, likes: c.digg_count, replies: c.reply_total, created: c.create_time ? new Date(c.create_time * 1000).toISOString() : null }));
+}
+// ---- Search-engine based (Bing / DuckDuckGo, no key): public posts that the engines have indexed ----
+const viaSearch = async (query, keep, n) => {
+  const d = await webSearch({ q: query, limit: 20 }, {});
+  return d.results.filter((r) => keep.test(r.url)).slice(0, n).map((r) => ({ title: r.title, url: r.url, snippet: r.snippet }));
+};
+const xSearch = (p) => viaSearch(`(site:x.com OR site:twitter.com) inurl:status ${need(p.q, 'q', 100)}`, /(?:x|twitter)\.com\/[^/]+\/status\/\d+/, lim(p));
+const igHashtag = (p) => { const t = need(p.tag, 'tag', 60).replace(/^#/, ''); return viaSearch(`site:instagram.com "#${t}"`, /instagram\.com\/(?:p|reel|reels)\//, lim(p)); };
+const fbPosts = (p) => { const u = new URL(safeUrl(p.url, ['facebook.com'])), slug = u.pathname.split('/').filter(Boolean)[0] || ''; if (!slug) throw new HttpError(400, 'Give the page link, e.g. https://www.facebook.com/nasa'); return viaSearch(`site:facebook.com/${slug}`, new RegExp('facebook\\.com/' + slug.replace(/[^\w.-]/g, '') + '/(?:posts|videos|photos|reel)|permalink|story_fbid', 'i'), lim(p)); };
+const FREE = { 'tiktok/search': tiktokSearch, 'tiktok/hashtag': tiktokHashtag, 'tiktok/comments': tiktokComments, 'twitter/search': xSearch, 'instagram/hashtag': igHashtag, 'facebook/posts': fbPosts,  'youtube/search': ytSearch, 'youtube/comments': ytComments, 'reddit/search': redditSearch, 'tiktok/profile': tiktokProfile, 'instagram/profile': igProfile, 'instagram/posts': igPosts(false), 'instagram/reels': igPosts(true), 'twitter/profile': xProfile, 'facebook/page': fbPage };
 // [path, name, desc, actor, params, build(p) -> input, platform]
-const E = (path, name, desc, actor, params, build, platform) => ({
-  path: '/api/social/' + path, category: 'Social', name, cost: 3, isNew: true, desc: desc + ' (via Apify)', needsEnv: ['APIFY_TOKEN'], noProbe: true, params,
-  run: async (p, env) => { const items = await runActor(actor, build(p), env); return { platform, count: items.length, items }; }
-});
+const E = (path, name, desc, actor, params, build, platform) => {
+  const free = FREE[path];
+  return {
+    path: '/api/social/' + path, category: 'Social', name, cost: free ? 1 : 3, isNew: true, desc: desc + (free ? '' : ' (via Apify)'), ...(free ? {} : { needsEnv: ['APIFY_TOKEN'], noProbe: true }), params,
+    run: async (p, env) => {
+      const input = build(p); // validates the input first (400 on bad input)
+      if (free) {
+        try { const items = await cached('free:' + path + ':' + JSON.stringify(p), 300, () => free(p, env)); if (items?.length) return { platform, count: items.length, items }; }
+        catch (e) { if (!env.APIFY_TOKEN || (e instanceof HttpError && e.status === 400)) throw e; }
+        if (!env.APIFY_TOKEN) throw new HttpError(404, 'Nothing found (private / empty / wrong name).');
+      }
+      const items = await runActor(actor, input, env); return { platform, count: items.length, items };
+    }
+  };
+};
 const L = param('limit', '10', '1-30 results', false);
 
 export default [
